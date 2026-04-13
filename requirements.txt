@@ -1,0 +1,5 @@
+discord.py-self==2.0.1
+supabase==2.3.0
+gotrue==2.4.1
+httpx==0.24.1
+python-dotenv==1.0.0
