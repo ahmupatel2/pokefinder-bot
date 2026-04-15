@@ -21,15 +21,8 @@ apts = [
   "libcairo2",
   "libasound2",
   "libglib2.0-0",
-  "libgio-2.0-0",
   "libexpat1"
 ]
 
-[phases.install]
-cmds = [
-  "pip install -r requirements.txt",
-  "python -m playwright install chromium"
-]
-
 [start]
-cmd = "python pokefinder_bot.py"
+cmd = "python -m playwright install chromium && python pokefinder_bot.py"
