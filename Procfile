@@ -1,1 +1,1 @@
-worker: python3 pokefinder_bot.py
+web: playwright install chromium && python pokefinder_bot.py
