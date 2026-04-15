@@ -2,9 +2,10 @@
 PokeFinder Discord Bot
 Reads Trackalacker alerts from the #pokemon channel
 and saves them to Supabase restocks table.
+Polls each alert's TrackaLacker page every 60s to detect sell-out via price change.
 
 Requirements:
-    pip install discord.py-self supabase python-dotenv httpx
+    pip install discord.py-self supabase python-dotenv httpx beautifulsoup4
 
 Usage:
     python pokefinder_bot.py
@@ -15,19 +16,25 @@ import asyncio
 import re
 import os
 import httpx
+from bs4 import BeautifulSoup
 from supabase import create_client
 
 # ── CONFIG ───────────────────────────────────────────
-DISCORD_TOKEN   = os.getenv("DISCORD_TOKEN", "YOUR_DISCORD_TOKEN_HERE")
-SUPABASE_URL    = "https://efkeafzzcvupjsrinoti.supabase.co"
-SUPABASE_KEY    = os.getenv("SUPABASE_KEY", "YOUR_SUPABASE_SERVICE_ROLE_KEY_HERE")
-
-WATCH_CHANNELS  = ["pokemon"]
+DISCORD_TOKEN         = os.getenv("DISCORD_TOKEN", "YOUR_DISCORD_TOKEN_HERE")
+SUPABASE_URL          = "https://efkeafzzcvupjsrinoti.supabase.co"
+SUPABASE_KEY          = os.getenv("SUPABASE_KEY", "YOUR_SUPABASE_SERVICE_ROLE_KEY_HERE")
+WATCH_CHANNELS        = ["pokemon"]
 TRACKALACKER_BOT_NAME = "trackalacker bot"
+POLL_INTERVAL         = 60   # seconds between price checks
+POLL_MAX_TIME         = 3600 # stop polling after 1 hour max (safety)
 # ───────────────────────────────────────────────────
 
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 client   = discord.Client()
+
+HTTP_HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+}
 
 
 async def extract_direct_url(trackalacker_url: str, retailer: str) -> str:
@@ -55,22 +62,91 @@ async def extract_direct_url(trackalacker_url: str, retailer: str) -> str:
         return trackalacker_url
 
     try:
-        headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
-        async with httpx.AsyncClient(follow_redirects=True, timeout=8) as client_http:
-            resp = await client_http.get(trackalacker_url, headers=headers)
+        async with httpx.AsyncClient(follow_redirects=True, timeout=8) as c:
+            resp = await c.get(trackalacker_url, headers=HTTP_HEADERS)
             html = resp.text
-
         matches = re.findall(rf'href=["\']([^"\']*.{re.escape(domain)}[^"\"]*)["\']', html)
         if matches:
             for m in matches:
                 if any(x in m for x in ['/dp/', '/ip/', '/p/', '/product']):
                     return m
             return matches[0]
-
     except Exception as e:
         print(f"[PokeFinder] Could not extract direct URL: {e}")
 
     return trackalacker_url
+
+
+async def fetch_price_from_page(url: str) -> float | None:
+    """
+    Fetch the TrackaLacker showcase page and extract the current price.
+    Returns None if price can't be found.
+    """
+    try:
+        async with httpx.AsyncClient(follow_redirects=True, timeout=10) as c:
+            resp = await c.get(url, headers=HTTP_HEADERS)
+            html = resp.text
+
+        soup = BeautifulSoup(html, "html.parser")
+
+        # Try common price patterns on TrackaLacker pages
+        # Look for price in meta tags first
+        for meta in soup.find_all("meta"):
+            prop = meta.get("property", "") or meta.get("name", "")
+            if "price" in prop.lower():
+                val = meta.get("content", "")
+                match = re.search(r'[\d,]+\.?\d*', val)
+                if match:
+                    return float(match.group().replace(",", ""))
+
+        # Look for price in page text via regex
+        price_matches = re.findall(r'\$([\d,]+\.\d{2})', html)
+        if price_matches:
+            # Return the first price found (usually the retailer price)
+            return float(price_matches[0].replace(",", ""))
+
+    except Exception as e:
+        print(f"[PokeFinder] Price fetch error: {e}")
+
+    return None
+
+
+async def poll_price(discord_msg_id: str, url: str, original_price: float):
+    """
+    Poll a TrackaLacker URL every POLL_INTERVAL seconds.
+    When price changes from original_price, mark the row ENDED and stop.
+    Stops automatically after POLL_MAX_TIME seconds.
+    """
+    elapsed = 0
+    print(f"[PokeFinder] Polling started: {discord_msg_id} @ ${original_price}")
+
+    while elapsed < POLL_MAX_TIME:
+        await asyncio.sleep(POLL_INTERVAL)
+        elapsed += POLL_INTERVAL
+
+        current_price = await fetch_price_from_page(url)
+
+        if current_price is None:
+            # Can't read price, skip this tick
+            print(f"[PokeFinder] Poll tick: couldn't read price for {discord_msg_id}")
+            continue
+
+        if current_price != original_price:
+            # Price changed — item sold out at retail
+            print(f"[PokeFinder] Price changed {discord_msg_id}: ${original_price} → ${current_price} — marking ENDED")
+            try:
+                supabase.table("restocks") \
+                    .update({"status": "ENDED"}) \
+                    .eq("discord_msg_id", discord_msg_id) \
+                    .execute()
+            except Exception as e:
+                print(f"[ERROR] Failed to mark ENDED: {e}")
+            return  # Stop polling this specific alert
+
+        print(f"[PokeFinder] Poll tick: {discord_msg_id} still ${current_price}")
+
+    # Hit max time, stop polling
+    print(f"[PokeFinder] Poll timeout reached for {discord_msg_id}")
 
 
 def parse_trackalacker(message: discord.Message) -> dict | None:
@@ -175,9 +251,25 @@ async def on_message(message: discord.Message):
     saved = save_restock(restock)
     if saved:
         print(f"[PokeFinder] Saved: {restock['product_name']} @ {restock['retailer']}")
+
+        # Try to get direct retailer URL in background
         if restock.get("trackalacker_url"):
             asyncio.create_task(
-                fetch_and_update_url(restock["discord_msg_id"], restock["trackalacker_url"], restock["retailer"])
+                fetch_and_update_url(
+                    restock["discord_msg_id"],
+                    restock["trackalacker_url"],
+                    restock["retailer"]
+                )
+            )
+
+        # Start price polling if we have a URL and price
+        if restock.get("trackalacker_url") and restock.get("price") is not None:
+            asyncio.create_task(
+                poll_price(
+                    restock["discord_msg_id"],
+                    restock["trackalacker_url"],
+                    restock["price"]
+                )
             )
     else:
         print(f"[PokeFinder] Save failed: {restock['discord_msg_id']}")
@@ -191,27 +283,6 @@ async def fetch_and_update_url(discord_msg_id: str, trackalacker_url: str, retai
         print(f"[PokeFinder] Updated URL → {direct_url[:60]}...")
     else:
         print(f"[PokeFinder] Kept TrackaLacker URL (no direct found)")
-
-
-@client.event
-async def on_message_edit(before: discord.Message, after: discord.Message):
-    if not hasattr(after.channel, 'name'):
-        return
-    if after.channel.name not in WATCH_CHANNELS:
-        return
-    if TRACKALACKER_BOT_NAME not in after.author.name.lower():
-        return
-
-    content = ((after.embeds[0].title if after.embeds else "") + after.content).upper()
-    if any(x in content for x in ["OUT OF STOCK", "SOLD OUT", "ENDED", "NO LONGER"]):
-        try:
-            supabase.table("restocks") \
-                .update({"status": "ENDED"}) \
-                .eq("discord_msg_id", str(after.id)) \
-                .execute()
-            print(f"[PokeFinder] Marked ENDED: {after.id}")
-        except Exception as e:
-            print(f"[ERROR] Failed to update status: {e}")
 
 
 if __name__ == "__main__":
