@@ -1,12 +1,13 @@
 """
 PokeFinder Discord Bot
-- Saves Trackalacker alerts to Supabase
+- Saves Trackalacker alerts to Supabase instantly
+- Uses Playwright to grab direct retailer links
 - Polls price every 60s to detect sell-out
-- Fetches direct retailer link via TrackaLacker login
 - Sends email-to-SMS text notifications
 
 Requirements:
-    pip install discord.py-self supabase python-dotenv httpx beautifulsoup4
+    pip install discord.py-self supabase python-dotenv httpx beautifulsoup4 playwright
+    playwright install chromium
 """
 
 import discord
@@ -19,7 +20,7 @@ from email.mime.text import MIMEText
 from bs4 import BeautifulSoup
 from supabase import create_client
 
-# ── CONFIG ──────────────────────────────────────────────────────────
+# ── CONFIG ──────────────────────────────────────────────────────────────────
 DISCORD_TOKEN         = os.getenv("DISCORD_TOKEN", "")
 SUPABASE_URL          = "https://efkeafzzcvupjsrinoti.supabase.co"
 SUPABASE_KEY          = os.getenv("SUPABASE_KEY", "")
@@ -31,17 +32,16 @@ WATCH_CHANNELS        = ["pokemon"]
 TRACKALACKER_BOT_NAME = "trackalacker bot"
 POLL_INTERVAL         = 60
 POLL_MAX_TIME         = 3600
-# ────────────────────────────────────────────────────────────────────
+# ────────────────────────────────────────────────────────────────────────────
 
-# Carrier email-to-SMS gateways
 CARRIER_GATEWAYS = {
-    "att":       "{number}@txt.att.net",
-    "verizon":   "{number}@vtext.com",
-    "tmobile":   "{number}@tmomail.net",
-    "sprint":    "{number}@messaging.sprintpcs.com",
-    "boost":     "{number}@sms.myboostmobile.com",
-    "cricket":   "{number}@sms.cricketwireless.net",
-    "metro":     "{number}@mymetropcs.com",
+    "att":        "{number}@txt.att.net",
+    "verizon":    "{number}@vtext.com",
+    "tmobile":    "{number}@tmomail.net",
+    "sprint":     "{number}@messaging.sprintpcs.com",
+    "boost":      "{number}@sms.myboostmobile.com",
+    "cricket":    "{number}@sms.cricketwireless.net",
+    "metro":      "{number}@mymetropcs.com",
     "uscellular": "{number}@email.uscc.net",
 }
 
@@ -54,88 +54,91 @@ HTTP_HEADERS = {
     "Accept-Language": "en-US,en;q=0.9",
 }
 
-# Shared authenticated TrackaLacker session
-_tl_session = None
+# Shared Playwright browser instance
+_pw_browser = None
+_pw_context = None  # Logged-in browser context
 
 
-async def get_tl_session() -> httpx.AsyncClient | None:
-    """Get or create an authenticated TrackaLacker session."""
-    global _tl_session
-    if _tl_session is not None:
-        return _tl_session
-
-    if not TRACKALACKER_EMAIL or not TRACKALACKER_PASSWORD:
-        return None
+async def get_pw_context():
+    """Get or create a logged-in Playwright browser context."""
+    global _pw_browser, _pw_context
 
     try:
-        session = httpx.AsyncClient(follow_redirects=True, timeout=15, headers=HTTP_HEADERS)
+        from playwright.async_api import async_playwright
 
-        # Get login page + CSRF token
-        login_page = await session.get("https://www.trackalacker.com/users/sign_in")
-        soup = BeautifulSoup(login_page.text, "html.parser")
-        csrf_meta = soup.find("meta", attrs={"name": "csrf-token"})
-        if not csrf_meta:
-            print("[PokeFinder] TrackaLacker: no CSRF token found")
-            return None
-        csrf = csrf_meta["content"]
+        if _pw_context is not None:
+            return _pw_context
 
-        # Submit login form
-        login_resp = await session.post(
-            "https://www.trackalacker.com/users/sign_in",
-            data={
-                "authenticity_token": csrf,
-                "user[email]": TRACKALACKER_EMAIL,
-                "user[password]": TRACKALACKER_PASSWORD,
-                "user[remember_me]": "1",
-                "commit": "Log in"
-            },
-            headers={**HTTP_HEADERS, "Content-Type": "application/x-www-form-urlencoded",
-                     "Referer": "https://www.trackalacker.com/users/sign_in"}
+        pw = await async_playwright().start()
+        _pw_browser = await pw.chromium.launch(
+            headless=True,
+            args=["--no-sandbox", "--disable-dev-shm-usage", "--disable-gpu"]
+        )
+        context = await _pw_browser.new_context(
+            user_agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
         )
 
-        # Check if logged in
-        if "sign_in" in str(login_resp.url) or "Invalid" in login_resp.text:
-            print("[PokeFinder] TrackaLacker login failed")
-            return None
+        if TRACKALACKER_EMAIL and TRACKALACKER_PASSWORD:
+            page = await context.new_page()
+            await page.goto("https://www.trackalacker.com/users/sign_in", wait_until="networkidle")
 
-        print("[PokeFinder] TrackaLacker login successful")
-        _tl_session = session
-        return session
+            # Fill login form
+            await page.fill('input[name="user[email]"]', TRACKALACKER_EMAIL)
+            await page.fill('input[name="user[password]"]', TRACKALACKER_PASSWORD)
+            await page.click('input[type="submit"], button[type="submit"]')
+            await page.wait_for_load_state("networkidle")
+
+            # Check if logged in
+            if "sign_in" in page.url:
+                print("[PokeFinder] TrackaLacker login failed")
+                await page.close()
+                await context.close()
+                return None
+
+            print("[PokeFinder] TrackaLacker login successful via Playwright")
+            await page.close()
+
+        _pw_context = context
+        return context
 
     except Exception as e:
-        print(f"[PokeFinder] TrackaLacker login error: {e}")
+        print(f"[PokeFinder] Playwright init error: {e}")
         return None
 
 
 async def get_direct_url(notification_url: str) -> str | None:
     """
-    Log into TrackaLacker, fetch the notification page,
-    and grab the direct retailer link from the ADD TO CART button.
+    Use Playwright to open the TrackaLacker notification page,
+    wait for the modal to render, and grab the ADD TO CART href.
     """
     if not notification_url:
         return None
 
     try:
-        session = await get_tl_session()
-        if not session:
+        context = await get_pw_context()
+        if not context:
             return None
 
-        resp = await session.get(notification_url)
-        soup = BeautifulSoup(resp.text, "html.parser")
+        page = await context.new_page()
+        try:
+            await page.goto(notification_url, wait_until="networkidle", timeout=20000)
 
-        # Find the ADD TO CART / btn-primary link with external retailer URL
-        for tag in soup.find_all("a", class_=lambda c: c and "btn-primary" in c):
-            href = tag.get("href", "")
-            # Must be an external retailer link
-            if href and href.startswith("http") and "trackalacker" not in href:
-                print(f"[PokeFinder] Direct URL found: {href[:80]}")
-                return href
+            # Wait for the ADD TO CART button to appear
+            try:
+                await page.wait_for_selector("a.btn-primary", timeout=8000)
+            except:
+                pass
 
-        # Fallback: any gtm-click-trigger link pointing to a retailer
-        for tag in soup.find_all("a", class_=lambda c: c and "gtm-click-trigger" in c):
-            href = tag.get("href", "")
-            if href and href.startswith("http") and "trackalacker" not in href:
-                return href
+            # Grab all btn-primary links that point to external retailers
+            links = await page.query_selector_all("a.btn-primary, a.gtm-click-trigger")
+            for link in links:
+                href = await link.get_attribute("href")
+                if href and href.startswith("http") and "trackalacker" not in href:
+                    print(f"[PokeFinder] Direct URL found: {href[:80]}")
+                    return href
+
+        finally:
+            await page.close()
 
     except Exception as e:
         print(f"[PokeFinder] get_direct_url error: {e}")
@@ -143,14 +146,13 @@ async def get_direct_url(notification_url: str) -> str | None:
     return None
 
 
-async def fetch_price_from_page(url: str, session=None) -> float | None:
-    """Fetch current price from TrackaLacker page."""
+async def fetch_price_from_page(url: str) -> float | None:
+    """Fetch current price from TrackaLacker page using httpx."""
     try:
-        s = session or httpx.AsyncClient(follow_redirects=True, timeout=10, headers=HTTP_HEADERS)
-        resp = await s.get(url)
-        html = resp.text
+        async with httpx.AsyncClient(follow_redirects=True, timeout=10, headers=HTTP_HEADERS) as c:
+            resp = await c.get(url)
+            html = resp.text
 
-        # Price in meta tags
         soup = BeautifulSoup(html, "html.parser")
         for meta in soup.find_all("meta"):
             prop = meta.get("property", "") or meta.get("name", "")
@@ -160,7 +162,6 @@ async def fetch_price_from_page(url: str, session=None) -> float | None:
                 if match:
                     return float(match.group().replace(",", ""))
 
-        # Fallback: first dollar amount in page
         price_matches = re.findall(r'\$([\d,]+\.\d{2})', html)
         if price_matches:
             return float(price_matches[0].replace(",", ""))
@@ -175,18 +176,17 @@ async def poll_price(discord_msg_id: str, url: str, original_price: float):
     """Poll price every 60s. Mark ENDED when price changes."""
     elapsed = 0
     print(f"[PokeFinder] Polling started: {discord_msg_id} @ ${original_price}")
-    session = await get_tl_session()
 
     while elapsed < POLL_MAX_TIME:
         await asyncio.sleep(POLL_INTERVAL)
         elapsed += POLL_INTERVAL
 
-        current_price = await fetch_price_from_page(url, session)
+        current_price = await fetch_price_from_page(url)
         if current_price is None:
             continue
 
         if current_price != original_price:
-            print(f"[PokeFinder] Price changed {discord_msg_id}: ${original_price} -> ${current_price} — ENDED")
+            print(f"[PokeFinder] Price changed {discord_msg_id}: ${original_price} -> ${current_price} — marking ENDED")
             try:
                 supabase.table("restocks") \
                     .update({"status": "ENDED"}) \
@@ -207,7 +207,6 @@ def send_sms_notifications(product: str, retailer: str, price: float, url: str):
         return
 
     try:
-        # Get subscribers who want alerts for this retailer
         result = supabase.table("alert_subscriptions") \
             .select("phone_number, carrier, retailers") \
             .eq("active", True) \
@@ -216,13 +215,11 @@ def send_sms_notifications(product: str, retailer: str, price: float, url: str):
         if not result.data:
             return
 
-        # Build message
         price_str = f"${price:.2f}" if price else "N/A"
         msg_text = f"POKEFINDER DROP\n{product}\n{retailer} - {price_str}\n{url}"
 
         sent = 0
         for sub in result.data:
-            # Check if this subscriber wants this retailer
             sub_retailers = sub.get("retailers") or []
             if sub_retailers and retailer.upper() not in [r.upper() for r in sub_retailers]:
                 continue
@@ -253,11 +250,10 @@ def send_sms_notifications(product: str, retailer: str, price: float, url: str):
             print(f"[PokeFinder] Sent {sent} SMS notifications")
 
     except Exception as e:
-        print(f"[PokeFinder] SMS notifications error: {e}")
+        print(f"[PokeFinder] SMS error: {e}")
 
 
 def parse_trackalacker(message: discord.Message) -> dict | None:
-    """Parse a Trackalacker embed into a restock dict."""
     if not message.embeds:
         return None
 
@@ -333,8 +329,8 @@ async def on_ready():
     print(f"[PokeFinder] Watching: {WATCH_CHANNELS}")
     for guild in client.guilds:
         print(f"[PokeFinder] Server: {guild.name}")
-    # Pre-login to TrackaLacker on startup
-    asyncio.create_task(get_tl_session())
+    # Pre-warm Playwright + login on startup
+    asyncio.create_task(get_pw_context())
 
 
 @client.event
@@ -358,22 +354,17 @@ async def on_message(message: discord.Message):
     print(f"[PokeFinder] Saved: {restock['product_name']} @ {restock['retailer']}")
 
     # Fire all background tasks simultaneously
-    tasks = []
-
-    # 1. Get direct retailer URL
     if restock.get("trackalacker_url"):
-        tasks.append(asyncio.create_task(
+        asyncio.create_task(
             fetch_and_update_url(restock["discord_msg_id"], restock["trackalacker_url"])
-        ))
+        )
 
-    # 2. Start price polling
     if restock.get("trackalacker_url") and restock.get("price") is not None:
-        tasks.append(asyncio.create_task(
+        asyncio.create_task(
             poll_price(restock["discord_msg_id"], restock["trackalacker_url"], restock["price"])
-        ))
+        )
 
-    # 3. Send SMS notifications
-    tasks.append(asyncio.create_task(
+    asyncio.create_task(
         asyncio.to_thread(
             send_sms_notifications,
             restock["product_name"],
@@ -381,11 +372,11 @@ async def on_message(message: discord.Message):
             restock.get("price"),
             restock.get("trackalacker_url", "")
         )
-    ))
+    )
 
 
 async def fetch_and_update_url(discord_msg_id: str, notification_url: str):
-    """Background: get direct retailer link and update DB."""
+    """Background: use Playwright to get direct retailer link and update DB."""
     direct_url = await get_direct_url(notification_url)
     if direct_url:
         update_url(discord_msg_id, direct_url)
