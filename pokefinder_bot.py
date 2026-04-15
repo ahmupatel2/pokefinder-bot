@@ -4,10 +4,6 @@ PokeFinder Discord Bot
 - Uses Playwright to grab direct retailer links
 - Polls price every 60s to detect sell-out
 - Sends email-to-SMS text notifications
-
-Requirements:
-    pip install discord.py-self supabase python-dotenv httpx beautifulsoup4 playwright
-    playwright install chromium
 """
 
 import discord
@@ -20,7 +16,6 @@ from email.mime.text import MIMEText
 from bs4 import BeautifulSoup
 from supabase import create_client
 
-# ── CONFIG ──────────────────────────────────────────────────────────────────
 DISCORD_TOKEN         = os.getenv("DISCORD_TOKEN", "")
 SUPABASE_URL          = "https://efkeafzzcvupjsrinoti.supabase.co"
 SUPABASE_KEY          = os.getenv("SUPABASE_KEY", "")
@@ -32,7 +27,6 @@ WATCH_CHANNELS        = ["pokemon"]
 TRACKALACKER_BOT_NAME = "trackalacker bot"
 POLL_INTERVAL         = 60
 POLL_MAX_TIME         = 3600
-# ────────────────────────────────────────────────────────────────────────────
 
 CARRIER_GATEWAYS = {
     "att":        "{number}@txt.att.net",
@@ -59,9 +53,7 @@ _pw_context = None
 
 
 async def get_pw_context():
-    """Get or create a logged-in Playwright browser context."""
     global _pw_browser, _pw_context
-
     try:
         from playwright.async_api import async_playwright
 
@@ -80,19 +72,45 @@ async def get_pw_context():
         if TRACKALACKER_EMAIL and TRACKALACKER_PASSWORD:
             page = await context.new_page()
             try:
-                await page.goto("https://www.trackalacker.com/users/sign_in", wait_until="domcontentloaded", timeout=30000)
-                # Wait for React to render the email input
-                await page.wait_for_selector("input[type='email'], input[name='user[email]']", timeout=15000)
-                await page.fill("input[type='email']", TRACKALACKER_EMAIL)
-                await page.fill("input[type='password']", TRACKALACKER_PASSWORD)
-                await page.click("input[type='submit'], button[type='submit'], button:has-text('Log in')")
+                # Wait for full JS render
+                await page.goto("https://www.trackalacker.com/users/sign_in", wait_until="networkidle", timeout=30000)
+                # The form is inside a React modal/component - find any input fields
+                await page.wait_for_function("document.querySelectorAll('input').length > 1", timeout=15000)
+                
+                # Use JS to fill the form directly - bypasses selector issues
+                await page.evaluate(f"""
+                    const inputs = document.querySelectorAll('input');
+                    for (const inp of inputs) {{
+                        if (inp.type === 'email' || inp.autocomplete === 'email' || inp.placeholder && inp.placeholder.toLowerCase().includes('email')) {{
+                            inp.value = '{TRACKALACKER_EMAIL}';
+                            inp.dispatchEvent(new Event('input', {{bubbles: true}}));
+                            inp.dispatchEvent(new Event('change', {{bubbles: true}}));
+                        }}
+                        if (inp.type === 'password') {{
+                            inp.value = '{TRACKALACKER_PASSWORD}';
+                            inp.dispatchEvent(new Event('input', {{bubbles: true}}));
+                            inp.dispatchEvent(new Event('change', {{bubbles: true}}));
+                        }}
+                    }}
+                """)
+                
+                await asyncio.sleep(0.5)
+                
+                # Click submit
+                await page.evaluate("""
+                    const btns = document.querySelectorAll('button[type=submit], input[type=submit]');
+                    if (btns.length > 0) btns[0].click();
+                """)
+                
                 await page.wait_for_load_state("networkidle", timeout=15000)
+                
                 if "sign_in" in page.url:
-                    print("[PokeFinder] TrackaLacker login failed")
+                    print(f"[PokeFinder] TrackaLacker login failed - still on sign_in page")
                 else:
-                    print("[PokeFinder] TrackaLacker login successful")
+                    print(f"[PokeFinder] TrackaLacker login successful - now at {page.url}")
+                    
             except Exception as e:
-                print(f"[PokeFinder] Login page error: {e}")
+                print(f"[PokeFinder] Login error: {e}")
             finally:
                 await page.close()
 
@@ -105,13 +123,8 @@ async def get_pw_context():
 
 
 async def get_direct_url(notification_url: str) -> str | None:
-    """
-    Use Playwright to open the TrackaLacker notification page,
-    wait for the modal to render, and grab the ADD TO CART href.
-    """
     if not notification_url:
         return None
-
     try:
         context = await get_pw_context()
         if not context:
@@ -120,7 +133,6 @@ async def get_direct_url(notification_url: str) -> str | None:
         page = await context.new_page()
         try:
             await page.goto(notification_url, wait_until="networkidle", timeout=20000)
-
             try:
                 await page.wait_for_selector("a.btn-primary", timeout=8000)
             except:
@@ -132,23 +144,19 @@ async def get_direct_url(notification_url: str) -> str | None:
                 if href and href.startswith("http") and "trackalacker" not in href:
                     print(f"[PokeFinder] Direct URL found: {href[:80]}")
                     return href
-
         finally:
             await page.close()
 
     except Exception as e:
         print(f"[PokeFinder] get_direct_url error: {e}")
-
     return None
 
 
 async def fetch_price_from_page(url: str) -> float | None:
-    """Fetch current price from TrackaLacker page using httpx."""
     try:
         async with httpx.AsyncClient(follow_redirects=True, timeout=10, headers=HTTP_HEADERS) as c:
             resp = await c.get(url)
             html = resp.text
-
         soup = BeautifulSoup(html, "html.parser")
         for meta in soup.find_all("meta"):
             prop = meta.get("property", "") or meta.get("name", "")
@@ -157,94 +165,67 @@ async def fetch_price_from_page(url: str) -> float | None:
                 match = re.search(r'[\d,]+\.?\d*', val)
                 if match:
                     return float(match.group().replace(",", ""))
-
         price_matches = re.findall(r'\$([\d,]+\.\d{2})', html)
         if price_matches:
             return float(price_matches[0].replace(",", ""))
-
     except Exception as e:
         print(f"[PokeFinder] Price fetch error: {e}")
-
     return None
 
 
 async def poll_price(discord_msg_id: str, url: str, original_price: float):
-    """Poll price every 60s. Mark ENDED when price changes."""
     elapsed = 0
     print(f"[PokeFinder] Polling started: {discord_msg_id} @ ${original_price}")
-
     while elapsed < POLL_MAX_TIME:
         await asyncio.sleep(POLL_INTERVAL)
         elapsed += POLL_INTERVAL
-
         current_price = await fetch_price_from_page(url)
         if current_price is None:
             continue
-
         if current_price != original_price:
-            print(f"[PokeFinder] Price changed {discord_msg_id}: ${original_price} -> ${current_price} — marking ENDED")
+            print(f"[PokeFinder] Price changed {discord_msg_id}: ${original_price} -> ${current_price} - marking ENDED")
             try:
-                supabase.table("restocks") \
-                    .update({"status": "ENDED"}) \
-                    .eq("discord_msg_id", discord_msg_id) \
-                    .execute()
+                supabase.table("restocks").update({"status": "ENDED"}).eq("discord_msg_id", discord_msg_id).execute()
             except Exception as e:
                 print(f"[ERROR] Mark ENDED failed: {e}")
             return
-
         print(f"[PokeFinder] Poll tick: {discord_msg_id} still ${current_price}")
-
     print(f"[PokeFinder] Poll timeout: {discord_msg_id}")
 
 
 def send_sms_notifications(product: str, retailer: str, price: float, url: str):
-    """Send email-to-SMS texts to all subscribed users for this retailer."""
     if not GMAIL_USER or not GMAIL_PASS:
         return
-
     try:
-        result = supabase.table("alert_subscriptions") \
-            .select("phone_number, carrier, retailers") \
-            .eq("active", True) \
-            .execute()
-
+        result = supabase.table("alert_subscriptions").select("phone_number, carrier, retailers").eq("active", True).execute()
         if not result.data:
             return
-
         price_str = f"${price:.2f}" if price else "N/A"
         msg_text = f"POKEFINDER DROP\n{product}\n{retailer} - {price_str}\n{url}"
-
         sent = 0
         for sub in result.data:
             sub_retailers = sub.get("retailers") or []
             if sub_retailers and retailer.upper() not in [r.upper() for r in sub_retailers]:
                 continue
-
             phone = re.sub(r'\D', '', sub.get("phone_number", ""))
             carrier = sub.get("carrier", "").lower().replace(" ", "")
             gateway = CARRIER_GATEWAYS.get(carrier)
-
             if not phone or not gateway:
                 continue
-
             sms_email = gateway.format(number=phone)
-
             try:
                 msg = MIMEText(msg_text)
                 msg["From"] = GMAIL_USER
                 msg["To"] = sms_email
                 msg["Subject"] = ""
-
                 with smtplib.SMTP_SSL("smtp.gmail.com", 465) as smtp:
                     smtp.login(GMAIL_USER, GMAIL_PASS)
                     smtp.sendmail(GMAIL_USER, sms_email, msg.as_string())
                 sent += 1
             except Exception as e:
-                print(f"[PokeFinder] SMS send failed to {sms_email}: {e}")
-
+                print(f"[PokeFinder] SMS failed to {sms_email}: {e}")
         if sent:
             print(f"[PokeFinder] Sent {sent} SMS notifications")
-
     except Exception as e:
         print(f"[PokeFinder] SMS error: {e}")
 
@@ -252,22 +233,18 @@ def send_sms_notifications(product: str, retailer: str, price: float, url: str):
 def parse_trackalacker(message: discord.Message) -> dict | None:
     if not message.embeds:
         return None
-
     embed = message.embeds[0]
     title_text = (embed.title or "") + (message.content or "")
     if "IN STOCK" not in title_text.upper():
         return None
-
     product_name = embed.title or ""
     product_name = re.sub(r'\s+is in stock.*$', '', product_name, flags=re.IGNORECASE).strip()
     if not product_name:
         return None
-
-    retailer         = None
-    price            = None
+    retailer = None
+    price = None
     trackalacker_url = embed.url or None
-    availability     = "ONLINE"
-
+    availability = "ONLINE"
     for field in embed.fields:
         name  = (field.name  or "").strip().upper()
         value = (field.value or "").strip()
@@ -277,16 +254,13 @@ def parse_trackalacker(message: discord.Message) -> dict | None:
             match = re.search(r'\$?([\d,]+\.?\d*)', value)
             if match:
                 price = float(match.group(1).replace(',', ''))
-
     if not retailer:
         for known in ["WALMART","TARGET","COSTCO","SAM'S CLUB","GAMESTOP","AMAZON","BESTBUY","BEST BUY"]:
             if known in title_text.upper():
                 retailer = known
                 break
-
     if not retailer or not product_name:
         return None
-
     return {
         "product_name":     product_name,
         "retailer":         retailer,
@@ -311,10 +285,7 @@ def save_restock(data: dict) -> bool:
 
 def update_url(discord_msg_id: str, direct_url: str):
     try:
-        supabase.table("restocks") \
-            .update({"url": direct_url}) \
-            .eq("discord_msg_id", discord_msg_id) \
-            .execute()
+        supabase.table("restocks").update({"url": direct_url}).eq("discord_msg_id", discord_msg_id).execute()
     except Exception as e:
         print(f"[ERROR] URL update failed: {e}")
 
@@ -336,44 +307,26 @@ async def on_message(message: discord.Message):
         return
     if TRACKALACKER_BOT_NAME not in message.author.name.lower():
         return
-
     restock = parse_trackalacker(message)
     if not restock:
         return
-
     saved = save_restock(restock)
     if not saved:
         print(f"[PokeFinder] Save failed: {restock['discord_msg_id']}")
         return
-
     print(f"[PokeFinder] Saved: {restock['product_name']} @ {restock['retailer']}")
-
     if restock.get("trackalacker_url"):
-        asyncio.create_task(
-            fetch_and_update_url(restock["discord_msg_id"], restock["trackalacker_url"])
-        )
-
+        asyncio.create_task(fetch_and_update_url(restock["discord_msg_id"], restock["trackalacker_url"]))
     if restock.get("trackalacker_url") and restock.get("price") is not None:
-        asyncio.create_task(
-            poll_price(restock["discord_msg_id"], restock["trackalacker_url"], restock["price"])
-        )
-
-    asyncio.create_task(
-        asyncio.to_thread(
-            send_sms_notifications,
-            restock["product_name"],
-            restock["retailer"],
-            restock.get("price"),
-            restock.get("trackalacker_url", "")
-        )
-    )
+        asyncio.create_task(poll_price(restock["discord_msg_id"], restock["trackalacker_url"], restock["price"]))
+    asyncio.create_task(asyncio.to_thread(send_sms_notifications, restock["product_name"], restock["retailer"], restock.get("price"), restock.get("trackalacker_url", "")))
 
 
 async def fetch_and_update_url(discord_msg_id: str, notification_url: str):
     direct_url = await get_direct_url(notification_url)
     if direct_url:
         update_url(discord_msg_id, direct_url)
-        print(f"[PokeFinder] Direct URL saved: {direct_url[:60]}")
+        print(f"[PokeFinder] Direct URL saved: {direct_url[:80]}")
     else:
         print(f"[PokeFinder] No direct URL found, keeping TrackaLacker link")
 
@@ -386,14 +339,10 @@ async def on_message_edit(before: discord.Message, after: discord.Message):
         return
     if TRACKALACKER_BOT_NAME not in after.author.name.lower():
         return
-
     content = ((after.embeds[0].title if after.embeds else "") + after.content).upper()
     if any(x in content for x in ["OUT OF STOCK", "SOLD OUT", "ENDED", "NO LONGER"]):
         try:
-            supabase.table("restocks") \
-                .update({"status": "ENDED"}) \
-                .eq("discord_msg_id", str(after.id)) \
-                .execute()
+            supabase.table("restocks").update({"status": "ENDED"}).eq("discord_msg_id", str(after.id)).execute()
             print(f"[PokeFinder] Marked ENDED: {after.id}")
         except Exception as e:
             print(f"[ERROR] Mark ENDED failed: {e}")
