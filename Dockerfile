@@ -1,5 +1,7 @@
 FROM mcr.microsoft.com/playwright/python:v1.44.0-jammy
 
+ENV PYTHONUNBUFFERED=1
+
 WORKDIR /app
 
 COPY requirements.txt .
