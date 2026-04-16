@@ -1,7 +1,8 @@
 """
 PokeFinder Discord Bot
 - Saves Trackalacker alerts to Supabase instantly
-- Uses Playwright to grab direct retailer links
+- Logs into TrackaLacker via httpx (bypasses Cloudflare), passes cookies to Playwright
+- Uses Playwright to render the page and grab the direct retailer ADD TO CART link
 - Polls price every 60s to detect sell-out
 - Sends email-to-SMS text notifications
 """
@@ -48,17 +49,75 @@ HTTP_HEADERS = {
     "Accept-Language": "en-US,en;q=0.9",
 }
 
-_pw_browser = None
-_pw_context = None
+_pw_browser  = None
+_pw_context  = None
+_tl_cookies  = None  # Cookies from httpx login
+
+
+async def httpx_login() -> dict | None:
+    """Log into TrackaLacker via httpx. Returns cookies dict or None."""
+    if not TRACKALACKER_EMAIL or not TRACKALACKER_PASSWORD:
+        return None
+    try:
+        session = httpx.Client(follow_redirects=True, timeout=15, headers=HTTP_HEADERS)
+        # Get CSRF token
+        login_page = session.get("https://www.trackalacker.com/users/sign_in")
+        soup = BeautifulSoup(login_page.text, "html.parser")
+        csrf_meta = soup.find("meta", attrs={"name": "csrf-token"})
+        if not csrf_meta:
+            print("[PokeFinder] No CSRF token found")
+            return None
+        csrf = csrf_meta["content"]
+
+        # Submit login
+        resp = session.post(
+            "https://www.trackalacker.com/users/sign_in",
+            data={
+                "authenticity_token": csrf,
+                "user[email]": TRACKALACKER_EMAIL,
+                "user[password]": TRACKALACKER_PASSWORD,
+                "user[remember_me]": "1",
+                "commit": "Log in"
+            },
+            headers={
+                **HTTP_HEADERS,
+                "Content-Type": "application/x-www-form-urlencoded",
+                "Referer": "https://www.trackalacker.com/users/sign_in",
+                "Origin": "https://www.trackalacker.com"
+            }
+        )
+
+        # Verify login success
+        profile = session.get("https://www.trackalacker.com/users/edit")
+        if "sign_in" in str(profile.url):
+            print("[PokeFinder] TrackaLacker httpx login failed")
+            return None
+
+        # Extract all cookies
+        cookies = dict(session.cookies)
+        print(f"[PokeFinder] TrackaLacker httpx login successful ({len(cookies)} cookies)")
+        return cookies
+
+    except Exception as e:
+        print(f"[PokeFinder] httpx login error: {e}")
+        return None
 
 
 async def get_pw_context():
-    global _pw_browser, _pw_context
+    """Get or create a Playwright browser context with TrackaLacker session cookies."""
+    global _pw_browser, _pw_context, _tl_cookies
+
     try:
         from playwright.async_api import async_playwright
 
         if _pw_context is not None:
             return _pw_context
+
+        # Log in via httpx first
+        _tl_cookies = await asyncio.to_thread(httpx_login) if not _tl_cookies else _tl_cookies
+        # httpx_login is sync so run in thread
+        if _tl_cookies is None:
+            _tl_cookies = await asyncio.get_event_loop().run_in_executor(None, lambda: __import__('asyncio').run(httpx_login()))
 
         pw = await async_playwright().start()
         _pw_browser = await pw.chromium.launch(
@@ -66,53 +125,17 @@ async def get_pw_context():
             args=["--no-sandbox", "--disable-dev-shm-usage", "--disable-gpu", "--disable-setuid-sandbox"]
         )
         context = await _pw_browser.new_context(
-            user_agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
+            user_agent=HTTP_HEADERS["User-Agent"]
         )
 
-        if TRACKALACKER_EMAIL and TRACKALACKER_PASSWORD:
-            page = await context.new_page()
-            try:
-                # Wait for full JS render
-                await page.goto("https://www.trackalacker.com/users/sign_in", wait_until="networkidle", timeout=30000)
-                # The form is inside a React modal/component - find any input fields
-                await page.wait_for_function("document.querySelectorAll('input').length > 1", timeout=15000)
-                
-                # Use JS to fill the form directly - bypasses selector issues
-                await page.evaluate(f"""
-                    const inputs = document.querySelectorAll('input');
-                    for (const inp of inputs) {{
-                        if (inp.type === 'email' || inp.autocomplete === 'email' || inp.placeholder && inp.placeholder.toLowerCase().includes('email')) {{
-                            inp.value = '{TRACKALACKER_EMAIL}';
-                            inp.dispatchEvent(new Event('input', {{bubbles: true}}));
-                            inp.dispatchEvent(new Event('change', {{bubbles: true}}));
-                        }}
-                        if (inp.type === 'password') {{
-                            inp.value = '{TRACKALACKER_PASSWORD}';
-                            inp.dispatchEvent(new Event('input', {{bubbles: true}}));
-                            inp.dispatchEvent(new Event('change', {{bubbles: true}}));
-                        }}
-                    }}
-                """)
-                
-                await asyncio.sleep(0.5)
-                
-                # Click submit
-                await page.evaluate("""
-                    const btns = document.querySelectorAll('button[type=submit], input[type=submit]');
-                    if (btns.length > 0) btns[0].click();
-                """)
-                
-                await page.wait_for_load_state("networkidle", timeout=15000)
-                
-                if "sign_in" in page.url:
-                    print(f"[PokeFinder] TrackaLacker login failed - still on sign_in page")
-                else:
-                    print(f"[PokeFinder] TrackaLacker login successful - now at {page.url}")
-                    
-            except Exception as e:
-                print(f"[PokeFinder] Login error: {e}")
-            finally:
-                await page.close()
+        # Inject cookies from httpx session into Playwright
+        if _tl_cookies:
+            pw_cookies = [
+                {"name": k, "value": v, "domain": ".trackalacker.com", "path": "/"}
+                for k, v in _tl_cookies.items()
+            ]
+            await context.add_cookies(pw_cookies)
+            print(f"[PokeFinder] Injected {len(pw_cookies)} cookies into Playwright")
 
         _pw_context = context
         return context
@@ -123,6 +146,7 @@ async def get_pw_context():
 
 
 async def get_direct_url(notification_url: str) -> str | None:
+    """Use Playwright (with injected session) to grab the ADD TO CART href."""
     if not notification_url:
         return None
     try:
@@ -144,6 +168,17 @@ async def get_direct_url(notification_url: str) -> str | None:
                 if href and href.startswith("http") and "trackalacker" not in href:
                     print(f"[PokeFinder] Direct URL found: {href[:80]}")
                     return href
+
+            # Debug: log what buttons ARE on the page
+            all_links = await page.query_selector_all("a")
+            btns = []
+            for l in all_links[:10]:
+                h = await l.get_attribute("href") or ""
+                t = await l.inner_text() or ""
+                if h or t:
+                    btns.append(f"{t.strip()[:30]}:{h[:60]}")
+            print(f"[PokeFinder] Page links: {btns}")
+
         finally:
             await page.close()
 
@@ -183,7 +218,7 @@ async def poll_price(discord_msg_id: str, url: str, original_price: float):
         if current_price is None:
             continue
         if current_price != original_price:
-            print(f"[PokeFinder] Price changed {discord_msg_id}: ${original_price} -> ${current_price} - marking ENDED")
+            print(f"[PokeFinder] Price changed {discord_msg_id}: ${original_price} -> ${current_price} - ENDED")
             try:
                 supabase.table("restocks").update({"status": "ENDED"}).eq("discord_msg_id", discord_msg_id).execute()
             except Exception as e:
@@ -244,7 +279,6 @@ def parse_trackalacker(message: discord.Message) -> dict | None:
     retailer = None
     price = None
     trackalacker_url = embed.url or None
-    availability = "ONLINE"
     for field in embed.fields:
         name  = (field.name  or "").strip().upper()
         value = (field.value or "").strip()
@@ -267,7 +301,7 @@ def parse_trackalacker(message: discord.Message) -> dict | None:
         "price":            price,
         "url":              trackalacker_url,
         "trackalacker_url": trackalacker_url,
-        "availability":     availability,
+        "availability":     "ONLINE",
         "status":           "LIVE",
         "source":           "trackalacker",
         "discord_msg_id":   str(message.id),
@@ -346,6 +380,86 @@ async def on_message_edit(before: discord.Message, after: discord.Message):
             print(f"[PokeFinder] Marked ENDED: {after.id}")
         except Exception as e:
             print(f"[ERROR] Mark ENDED failed: {e}")
+
+
+async def _init_tl_cookies():
+    global _tl_cookies
+    _tl_cookies = await asyncio.to_thread(lambda: __import__('asyncio').new_event_loop().run_until_complete(httpx_login()) if False else _sync_httpx_login())
+
+
+def _sync_httpx_login() -> dict | None:
+    """Synchronous version of httpx login."""
+    if not TRACKALACKER_EMAIL or not TRACKALACKER_PASSWORD:
+        return None
+    try:
+        session = httpx.Client(follow_redirects=True, timeout=15, headers=HTTP_HEADERS)
+        login_page = session.get("https://www.trackalacker.com/users/sign_in")
+        soup = BeautifulSoup(login_page.text, "html.parser")
+        csrf_meta = soup.find("meta", attrs={"name": "csrf-token"})
+        if not csrf_meta:
+            return None
+        csrf = csrf_meta["content"]
+        session.post(
+            "https://www.trackalacker.com/users/sign_in",
+            data={
+                "authenticity_token": csrf,
+                "user[email]": TRACKALACKER_EMAIL,
+                "user[password]": TRACKALACKER_PASSWORD,
+                "user[remember_me]": "1",
+                "commit": "Log in"
+            },
+            headers={
+                **HTTP_HEADERS,
+                "Content-Type": "application/x-www-form-urlencoded",
+                "Referer": "https://www.trackalacker.com/users/sign_in",
+                "Origin": "https://www.trackalacker.com"
+            }
+        )
+        profile = session.get("https://www.trackalacker.com/users/edit")
+        if "sign_in" in str(profile.url):
+            print("[PokeFinder] TrackaLacker login failed")
+            return None
+        cookies = dict(session.cookies)
+        print(f"[PokeFinder] TrackaLacker login successful ({len(cookies)} cookies)")
+        return cookies
+    except Exception as e:
+        print(f"[PokeFinder] Login error: {e}")
+        return None
+
+
+async def get_pw_context():
+    """Get or create Playwright context with injected TrackaLacker session cookies."""
+    global _pw_browser, _pw_context, _tl_cookies
+    try:
+        from playwright.async_api import async_playwright
+        if _pw_context is not None:
+            return _pw_context
+
+        # Login via httpx (sync, runs in thread to not block event loop)
+        if _tl_cookies is None:
+            _tl_cookies = await asyncio.to_thread(_sync_httpx_login)
+
+        pw = await async_playwright().start()
+        _pw_browser = await pw.chromium.launch(
+            headless=True,
+            args=["--no-sandbox", "--disable-dev-shm-usage", "--disable-gpu", "--disable-setuid-sandbox"]
+        )
+        context = await _pw_browser.new_context(user_agent=HTTP_HEADERS["User-Agent"])
+
+        # Inject cookies so Playwright is logged in
+        if _tl_cookies:
+            pw_cookies = [
+                {"name": k, "value": v, "domain": ".trackalacker.com", "path": "/"}
+                for k, v in _tl_cookies.items()
+            ]
+            await context.add_cookies(pw_cookies)
+            print(f"[PokeFinder] Playwright context ready with {len(pw_cookies)} session cookies")
+
+        _pw_context = context
+        return context
+    except Exception as e:
+        print(f"[PokeFinder] Playwright init error: {e}")
+        return None
 
 
 if __name__ == "__main__":
