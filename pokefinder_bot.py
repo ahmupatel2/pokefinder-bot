@@ -1,7 +1,7 @@
 """
 PokeFinder Discord Bot
 - Saves TrackaLacker alerts to Supabase instantly
-- Logs into TrackaLacker via httpx, then fetches /showcase/{slug}.json for direct URLs
+- Fetches direct retailer URL via /showcase/{slug}.json
 - Polls price every 60s to detect sell-out
 - Sends email-to-SMS text notifications
 """
@@ -39,12 +39,6 @@ CARRIER_GATEWAYS = {
     "uscellular": "{number}@email.uscc.net",
 }
 
-RETAILER_DOMAINS = [
-    "walmart.com", "amazon.com", "target.com", "costco.com",
-    "samsclub.com", "gamestop.com", "bestbuy.com", "dickssporting.com",
-    "kohls.com", "macys.com", "scheels.com"
-]
-
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 client   = discord.Client()
 
@@ -54,12 +48,11 @@ HTTP_HEADERS = {
     "Accept-Language": "en-US,en;q=0.9",
 }
 
-# Shared authenticated httpx session
 _tl_session: httpx.Client | None = None
 
 
 def get_tl_session() -> httpx.Client | None:
-    """Get or create an authenticated TrackaLacker httpx session."""
+    """Log into TrackaLacker with httpx. Returns authenticated session or None."""
     global _tl_session
     if _tl_session is not None:
         return _tl_session
@@ -71,7 +64,7 @@ def get_tl_session() -> httpx.Client | None:
         soup = BeautifulSoup(login_page.text, "html.parser")
         csrf_meta = soup.find("meta", attrs={"name": "csrf-token"})
         if not csrf_meta:
-            print("[PokeFinder] No CSRF token found")
+            print("[PokeFinder] Login page blocked (no CSRF) - will try unauthenticated")
             return None
         csrf = csrf_meta["content"]
         session.post(
@@ -87,12 +80,11 @@ def get_tl_session() -> httpx.Client | None:
                      "Referer": "https://www.trackalacker.com/users/sign_in",
                      "Origin": "https://www.trackalacker.com"}
         )
-        # Verify
         profile = session.get("https://www.trackalacker.com/users/edit")
         if "sign_in" in str(profile.url):
             print("[PokeFinder] TrackaLacker login failed")
             return None
-        print(f"[PokeFinder] TrackaLacker login successful")
+        print("[PokeFinder] TrackaLacker login successful")
         _tl_session = session
         return session
     except Exception as e:
@@ -105,85 +97,84 @@ def extract_slug(trackalacker_url: str) -> str | None:
     return match.group(1) if match else None
 
 
-async def get_direct_url(trackalacker_url: str, retailer: str, alert_price: float) -> str | None:
-    """Fetch /showcase/{slug}.json with auth session and find matching direct URL."""
-    slug = extract_slug(trackalacker_url)
-    if not slug:
-        return None
+def parse_listings(data: dict, retailer: str, alert_price: float) -> str | None:
+    """Find the best matching direct URL from listings JSON."""
+    listings = data.get("product", {}).get("listings", [])
+    retailer_upper = retailer.upper()
+    best_match = None
+    for listing in listings:
+        provider = listing.get("provider", {}).get("display_name", "").upper()
+        current = listing.get("current_status", {})
+        price = listing.get("price") or 0
+        in_stock = current.get("online_availability", False)
+        direct_url = listing.get("url", "")
+        if not direct_url or not in_stock:
+            continue
+        if retailer_upper in provider or provider in retailer_upper:
+            if abs(price - alert_price) < 0.01:
+                return direct_url
+            best_match = direct_url
+    return best_match
+
+
+async def fetch_json(slug: str) -> dict | None:
+    """Fetch .json endpoint, trying unauthenticated first, then authenticated."""
     json_url = f"https://www.trackalacker.com/products/showcase/{slug}.json"
+
+    # Try without auth first
+    try:
+        async with httpx.AsyncClient(follow_redirects=True, timeout=10, headers=HTTP_HEADERS) as c:
+            resp = await c.get(json_url)
+            if resp.status_code == 200:
+                print(f"[PokeFinder] JSON fetched (no auth)")
+                return resp.json()
+            print(f"[PokeFinder] JSON unauthenticated: {resp.status_code}, trying with auth...")
+    except Exception as e:
+        print(f"[PokeFinder] JSON unauthenticated error: {e}")
+
+    # Try with auth session
     try:
         session = await asyncio.to_thread(get_tl_session)
         if not session:
             return None
         resp = await asyncio.to_thread(session.get, json_url)
-        if resp.status_code != 200:
-            print(f"[PokeFinder] JSON endpoint returned {resp.status_code}")
-            # Re-login on auth failure
-            global _tl_session
-            _tl_session = None
-            return None
-        data = resp.json()
-        listings = data.get("product", {}).get("listings", [])
-        retailer_upper = retailer.upper()
-
-        # Find matching in-stock listing for this retailer + price
-        best_match = None
-        for listing in listings:
-            provider = listing.get("provider", {}).get("display_name", "").upper()
-            current = listing.get("current_status", {})
-            price = listing.get("price") or 0
-            in_stock = current.get("online_availability", False)
-            direct_url = listing.get("url", "")
-            if not direct_url or not in_stock:
-                continue
-            retailer_match = (
-                retailer_upper in provider or
-                provider in retailer_upper
-            )
-            if retailer_match:
-                if abs(price - alert_price) < 0.01:
-                    print(f"[PokeFinder] Direct URL found (exact): {direct_url[:80]}")
-                    return direct_url
-                best_match = direct_url
-
-        if best_match:
-            print(f"[PokeFinder] Direct URL found (best): {best_match[:80]}")
-            return best_match
-
-        # Fallback: any in-stock retailer listing
-        for listing in listings:
-            if listing.get("current_status", {}).get("online_availability") and listing.get("url"):
-                url = listing["url"]
-                if any(d in url for d in RETAILER_DOMAINS):
-                    print(f"[PokeFinder] Direct URL found (fallback): {url[:80]}")
-                    return url
+        if resp.status_code == 200:
+            print(f"[PokeFinder] JSON fetched (authenticated)")
+            return resp.json()
+        print(f"[PokeFinder] JSON authenticated: {resp.status_code}")
     except Exception as e:
-        print(f"[PokeFinder] get_direct_url error: {e}")
+        print(f"[PokeFinder] JSON authenticated error: {e}")
+
     return None
+
+
+async def get_direct_url(trackalacker_url: str, retailer: str, alert_price: float) -> str | None:
+    slug = extract_slug(trackalacker_url)
+    if not slug:
+        return None
+    data = await fetch_json(slug)
+    if not data:
+        return None
+    url = parse_listings(data, retailer, alert_price)
+    if url:
+        print(f"[PokeFinder] Direct URL found: {url[:80]}")
+    return url
 
 
 async def fetch_price_from_json(trackalacker_url: str, retailer: str) -> float | None:
     slug = extract_slug(trackalacker_url)
     if not slug:
         return None
-    try:
-        session = await asyncio.to_thread(get_tl_session)
-        if not session:
-            return None
-        resp = await asyncio.to_thread(session.get, f"https://www.trackalacker.com/products/showcase/{slug}.json")
-        if resp.status_code != 200:
-            return None
-        data = resp.json()
-        listings = data.get("product", {}).get("listings", [])
-        retailer_upper = retailer.upper()
-        for listing in listings:
-            provider = listing.get("provider", {}).get("display_name", "").upper()
-            if retailer_upper in provider or provider in retailer_upper:
-                price = listing.get("current_status", {}).get("price")
-                if price is not None:
-                    return float(price)
-    except Exception as e:
-        print(f"[PokeFinder] Price fetch error: {e}")
+    data = await fetch_json(slug)
+    if not data:
+        return None
+    retailer_upper = retailer.upper()
+    for listing in data.get("product", {}).get("listings", []):
+        provider = listing.get("provider", {}).get("display_name", "").upper()
+        if retailer_upper in provider or provider in retailer_upper:
+            price = listing.get("current_status", {}).get("price")
+            if price is not None:
+                return float(price)
     return None
 
 
@@ -309,7 +300,6 @@ async def on_ready():
     print(f"[PokeFinder] Watching: {WATCH_CHANNELS}")
     for guild in client.guilds:
         print(f"[PokeFinder] Server: {guild.name}")
-    # Pre-warm login session
     asyncio.create_task(asyncio.to_thread(get_tl_session))
 
 
