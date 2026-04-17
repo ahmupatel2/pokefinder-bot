@@ -1,7 +1,7 @@
 """
 PokeFinder Discord Bot
 - Saves TrackaLacker alerts to Supabase instantly
-- Fetches direct retailer URL via /showcase/{slug}.json
+- Fetches direct retailer URL via Supabase Edge Function proxy (bypasses Cloudflare)
 - Polls price every 60s to detect sell-out
 - Sends email-to-SMS text notifications
 """
@@ -13,20 +13,20 @@ import os
 import smtplib
 import httpx
 from email.mime.text import MIMEText
-from bs4 import BeautifulSoup
 from supabase import create_client
 
-DISCORD_TOKEN         = os.getenv("DISCORD_TOKEN", "")
-SUPABASE_URL          = "https://efkeafzzcvupjsrinoti.supabase.co"
-SUPABASE_KEY          = os.getenv("SUPABASE_KEY", "")
-TRACKALACKER_EMAIL    = os.getenv("TRACKALACKER_EMAIL", "")
-TRACKALACKER_PASSWORD = os.getenv("TRACKALACKER_PASSWORD", "")
-GMAIL_USER            = os.getenv("GMAIL_USER", "")
-GMAIL_PASS            = os.getenv("GMAIL_PASS", "")
-WATCH_CHANNELS        = ["pokemon"]
-TRACKALACKER_BOT_NAME = "trackalacker bot"
-POLL_INTERVAL         = 60
-POLL_MAX_TIME         = 3600
+DISCORD_TOKEN      = os.getenv("DISCORD_TOKEN", "")
+SUPABASE_URL       = "https://efkeafzzcvupjsrinoti.supabase.co"
+SUPABASE_KEY       = os.getenv("SUPABASE_KEY", "")
+GMAIL_USER         = os.getenv("GMAIL_USER", "")
+GMAIL_PASS         = os.getenv("GMAIL_PASS", "")
+WATCH_CHANNELS     = ["pokemon"]
+TRACKALACKER_BOT   = "trackalacker bot"
+POLL_INTERVAL      = 60
+POLL_MAX_TIME      = 3600
+
+# Edge Function URL - runs on Cloudflare, not blocked by Cloudflare WAF
+EDGE_PROXY_URL = "https://efkeafzzcvupjsrinoti.supabase.co/functions/v1/trackalacker-proxy"
 
 CARRIER_GATEWAYS = {
     "att":        "{number}@txt.att.net",
@@ -44,52 +44,7 @@ client   = discord.Client()
 
 HTTP_HEADERS = {
     "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36",
-    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-    "Accept-Language": "en-US,en;q=0.9",
 }
-
-_tl_session: httpx.Client | None = None
-
-
-def get_tl_session() -> httpx.Client | None:
-    """Log into TrackaLacker with httpx. Returns authenticated session or None."""
-    global _tl_session
-    if _tl_session is not None:
-        return _tl_session
-    if not TRACKALACKER_EMAIL or not TRACKALACKER_PASSWORD:
-        return None
-    try:
-        session = httpx.Client(follow_redirects=True, timeout=15, headers=HTTP_HEADERS)
-        login_page = session.get("https://www.trackalacker.com/users/sign_in")
-        soup = BeautifulSoup(login_page.text, "html.parser")
-        csrf_meta = soup.find("meta", attrs={"name": "csrf-token"})
-        if not csrf_meta:
-            print("[PokeFinder] Login page blocked (no CSRF) - will try unauthenticated")
-            return None
-        csrf = csrf_meta["content"]
-        session.post(
-            "https://www.trackalacker.com/users/sign_in",
-            data={
-                "authenticity_token": csrf,
-                "user[email]": TRACKALACKER_EMAIL,
-                "user[password]": TRACKALACKER_PASSWORD,
-                "user[remember_me]": "1",
-                "commit": "Log in"
-            },
-            headers={**HTTP_HEADERS, "Content-Type": "application/x-www-form-urlencoded",
-                     "Referer": "https://www.trackalacker.com/users/sign_in",
-                     "Origin": "https://www.trackalacker.com"}
-        )
-        profile = session.get("https://www.trackalacker.com/users/edit")
-        if "sign_in" in str(profile.url):
-            print("[PokeFinder] TrackaLacker login failed")
-            return None
-        print("[PokeFinder] TrackaLacker login successful")
-        _tl_session = session
-        return session
-    except Exception as e:
-        print(f"[PokeFinder] Login error: {e}")
-        return None
 
 
 def extract_slug(trackalacker_url: str) -> str | None:
@@ -97,54 +52,21 @@ def extract_slug(trackalacker_url: str) -> str | None:
     return match.group(1) if match else None
 
 
-def parse_listings(data: dict, retailer: str, alert_price: float) -> str | None:
-    """Find the best matching direct URL from listings JSON."""
-    listings = data.get("product", {}).get("listings", [])
-    retailer_upper = retailer.upper()
-    best_match = None
-    for listing in listings:
-        provider = listing.get("provider", {}).get("display_name", "").upper()
-        current = listing.get("current_status", {})
-        price = listing.get("price") or 0
-        in_stock = current.get("online_availability", False)
-        direct_url = listing.get("url", "")
-        if not direct_url or not in_stock:
-            continue
-        if retailer_upper in provider or provider in retailer_upper:
-            if abs(price - alert_price) < 0.01:
-                return direct_url
-            best_match = direct_url
-    return best_match
-
-
 async def fetch_json(slug: str) -> dict | None:
-    """Fetch .json endpoint, trying unauthenticated first, then authenticated."""
-    json_url = f"https://www.trackalacker.com/products/showcase/{slug}.json"
-
-    # Try without auth first
+    """Fetch TrackaLacker JSON via Supabase Edge Function proxy."""
     try:
-        async with httpx.AsyncClient(follow_redirects=True, timeout=10, headers=HTTP_HEADERS) as c:
-            resp = await c.get(json_url)
+        async with httpx.AsyncClient(timeout=15) as c:
+            resp = await c.get(EDGE_PROXY_URL, params={"slug": slug})
             if resp.status_code == 200:
-                print(f"[PokeFinder] JSON fetched (no auth)")
-                return resp.json()
-            print(f"[PokeFinder] JSON unauthenticated: {resp.status_code}, trying with auth...")
+                data = resp.json()
+                if "error" not in data:
+                    print(f"[PokeFinder] JSON fetched via proxy for {slug}")
+                    return data
+                print(f"[PokeFinder] Proxy error: {data['error']}")
+            else:
+                print(f"[PokeFinder] Proxy returned {resp.status_code}")
     except Exception as e:
-        print(f"[PokeFinder] JSON unauthenticated error: {e}")
-
-    # Try with auth session
-    try:
-        session = await asyncio.to_thread(get_tl_session)
-        if not session:
-            return None
-        resp = await asyncio.to_thread(session.get, json_url)
-        if resp.status_code == 200:
-            print(f"[PokeFinder] JSON fetched (authenticated)")
-            return resp.json()
-        print(f"[PokeFinder] JSON authenticated: {resp.status_code}")
-    except Exception as e:
-        print(f"[PokeFinder] JSON authenticated error: {e}")
-
+        print(f"[PokeFinder] Proxy fetch error: {e}")
     return None
 
 
@@ -155,10 +77,29 @@ async def get_direct_url(trackalacker_url: str, retailer: str, alert_price: floa
     data = await fetch_json(slug)
     if not data:
         return None
-    url = parse_listings(data, retailer, alert_price)
-    if url:
-        print(f"[PokeFinder] Direct URL found: {url[:80]}")
-    return url
+
+    listings = data.get("product", {}).get("listings", [])
+    retailer_upper = retailer.upper()
+    best_match = None
+
+    for listing in listings:
+        provider = listing.get("provider", {}).get("display_name", "").upper()
+        current = listing.get("current_status", {})
+        price = listing.get("price") or 0
+        in_stock = current.get("online_availability", False)
+        direct_url = listing.get("url", "")
+        if not direct_url or not in_stock:
+            continue
+        if retailer_upper in provider or provider in retailer_upper:
+            if abs(price - alert_price) < 0.01:
+                print(f"[PokeFinder] Direct URL found (exact): {direct_url[:80]}")
+                return direct_url
+            best_match = direct_url
+
+    if best_match:
+        print(f"[PokeFinder] Direct URL found (best): {best_match[:80]}")
+        return best_match
+    return None
 
 
 async def fetch_price_from_json(trackalacker_url: str, retailer: str) -> float | None:
@@ -219,6 +160,8 @@ def send_sms_notifications(product: str, retailer: str, price: float, url: str):
                 continue
             sms_email = gateway.format(number=phone)
             try:
+                from email.mime.text import MIMEText
+                import smtplib
                 msg = MIMEText(msg_text)
                 msg["From"] = GMAIL_USER
                 msg["To"] = sms_email
@@ -300,7 +243,7 @@ async def on_ready():
     print(f"[PokeFinder] Watching: {WATCH_CHANNELS}")
     for guild in client.guilds:
         print(f"[PokeFinder] Server: {guild.name}")
-    asyncio.create_task(asyncio.to_thread(get_tl_session))
+    print(f"[PokeFinder] Proxy: {EDGE_PROXY_URL}")
 
 
 @client.event
@@ -309,7 +252,7 @@ async def on_message(message: discord.Message):
         return
     if message.channel.name not in WATCH_CHANNELS:
         return
-    if TRACKALACKER_BOT_NAME not in message.author.name.lower():
+    if TRACKALACKER_BOT not in message.author.name.lower():
         return
     restock = parse_trackalacker(message)
     if not restock:
@@ -350,7 +293,7 @@ async def on_message_edit(before: discord.Message, after: discord.Message):
         return
     if after.channel.name not in WATCH_CHANNELS:
         return
-    if TRACKALACKER_BOT_NAME not in after.author.name.lower():
+    if TRACKALACKER_BOT not in after.author.name.lower():
         return
     title = (after.embeds[0].title if after.embeds else "") or ""
     content = (title + (after.content or "")).upper()
