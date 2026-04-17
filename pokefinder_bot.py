@@ -1,7 +1,7 @@
 """
 PokeFinder Discord Bot
 - Saves TrackaLacker alerts to Supabase instantly
-- Fetches direct retailer URL via /products/showcase/{slug}.json (no login needed)
+- Logs into TrackaLacker via httpx, then fetches /showcase/{slug}.json for direct URLs
 - Polls price every 60s to detect sell-out
 - Sends email-to-SMS text notifications
 """
@@ -19,6 +19,8 @@ from supabase import create_client
 DISCORD_TOKEN         = os.getenv("DISCORD_TOKEN", "")
 SUPABASE_URL          = "https://efkeafzzcvupjsrinoti.supabase.co"
 SUPABASE_KEY          = os.getenv("SUPABASE_KEY", "")
+TRACKALACKER_EMAIL    = os.getenv("TRACKALACKER_EMAIL", "")
+TRACKALACKER_PASSWORD = os.getenv("TRACKALACKER_PASSWORD", "")
 GMAIL_USER            = os.getenv("GMAIL_USER", "")
 GMAIL_PASS            = os.getenv("GMAIL_PASS", "")
 WATCH_CHANNELS        = ["pokemon"]
@@ -48,40 +50,83 @@ client   = discord.Client()
 
 HTTP_HEADERS = {
     "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36",
-    "Accept": "application/json, text/html",
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
     "Accept-Language": "en-US,en;q=0.9",
 }
 
+# Shared authenticated httpx session
+_tl_session: httpx.Client | None = None
+
+
+def get_tl_session() -> httpx.Client | None:
+    """Get or create an authenticated TrackaLacker httpx session."""
+    global _tl_session
+    if _tl_session is not None:
+        return _tl_session
+    if not TRACKALACKER_EMAIL or not TRACKALACKER_PASSWORD:
+        return None
+    try:
+        session = httpx.Client(follow_redirects=True, timeout=15, headers=HTTP_HEADERS)
+        login_page = session.get("https://www.trackalacker.com/users/sign_in")
+        soup = BeautifulSoup(login_page.text, "html.parser")
+        csrf_meta = soup.find("meta", attrs={"name": "csrf-token"})
+        if not csrf_meta:
+            print("[PokeFinder] No CSRF token found")
+            return None
+        csrf = csrf_meta["content"]
+        session.post(
+            "https://www.trackalacker.com/users/sign_in",
+            data={
+                "authenticity_token": csrf,
+                "user[email]": TRACKALACKER_EMAIL,
+                "user[password]": TRACKALACKER_PASSWORD,
+                "user[remember_me]": "1",
+                "commit": "Log in"
+            },
+            headers={**HTTP_HEADERS, "Content-Type": "application/x-www-form-urlencoded",
+                     "Referer": "https://www.trackalacker.com/users/sign_in",
+                     "Origin": "https://www.trackalacker.com"}
+        )
+        # Verify
+        profile = session.get("https://www.trackalacker.com/users/edit")
+        if "sign_in" in str(profile.url):
+            print("[PokeFinder] TrackaLacker login failed")
+            return None
+        print(f"[PokeFinder] TrackaLacker login successful")
+        _tl_session = session
+        return session
+    except Exception as e:
+        print(f"[PokeFinder] Login error: {e}")
+        return None
+
 
 def extract_slug(trackalacker_url: str) -> str | None:
-    """Extract the product slug from a TrackaLacker URL."""
     match = re.search(r'/products/showcase/([^?&/]+)', trackalacker_url)
     return match.group(1) if match else None
 
 
 async def get_direct_url(trackalacker_url: str, retailer: str, alert_price: float) -> str | None:
-    """
-    Fetch /products/showcase/{slug}.json and find the listing that matches
-    the retailer and price from the Discord alert. Returns the direct URL.
-    """
+    """Fetch /showcase/{slug}.json with auth session and find matching direct URL."""
     slug = extract_slug(trackalacker_url)
     if not slug:
         return None
-
     json_url = f"https://www.trackalacker.com/products/showcase/{slug}.json"
-
     try:
-        async with httpx.AsyncClient(follow_redirects=True, timeout=10, headers=HTTP_HEADERS) as c:
-            resp = await c.get(json_url)
-            if resp.status_code != 200:
-                print(f"[PokeFinder] JSON endpoint returned {resp.status_code}")
-                return None
-            data = resp.json()
-
+        session = await asyncio.to_thread(get_tl_session)
+        if not session:
+            return None
+        resp = await asyncio.to_thread(session.get, json_url)
+        if resp.status_code != 200:
+            print(f"[PokeFinder] JSON endpoint returned {resp.status_code}")
+            # Re-login on auth failure
+            global _tl_session
+            _tl_session = None
+            return None
+        data = resp.json()
         listings = data.get("product", {}).get("listings", [])
         retailer_upper = retailer.upper()
 
-        # Find the matching in-stock listing for this retailer
+        # Find matching in-stock listing for this retailer + price
         best_match = None
         for listing in listings:
             provider = listing.get("provider", {}).get("display_name", "").upper()
@@ -89,61 +134,52 @@ async def get_direct_url(trackalacker_url: str, retailer: str, alert_price: floa
             price = listing.get("price") or 0
             in_stock = current.get("online_availability", False)
             direct_url = listing.get("url", "")
-
             if not direct_url or not in_stock:
                 continue
-
-            # Match retailer name
             retailer_match = (
                 retailer_upper in provider or
-                provider in retailer_upper or
-                any(d in direct_url for d in RETAILER_DOMAINS if any(r in d for r in retailer_upper.lower().split()))
+                provider in retailer_upper
             )
-
             if retailer_match:
-                # Prefer listing whose price matches the alert price
                 if abs(price - alert_price) < 0.01:
-                    print(f"[PokeFinder] Direct URL found (exact price match): {direct_url[:80]}")
+                    print(f"[PokeFinder] Direct URL found (exact): {direct_url[:80]}")
                     return direct_url
                 best_match = direct_url
 
         if best_match:
-            print(f"[PokeFinder] Direct URL found (best match): {best_match[:80]}")
+            print(f"[PokeFinder] Direct URL found (best): {best_match[:80]}")
             return best_match
 
-        # Fallback: return any in-stock listing URL matching a known retailer domain
+        # Fallback: any in-stock retailer listing
         for listing in listings:
-            current = listing.get("current_status", {})
-            if current.get("online_availability") and listing.get("url"):
+            if listing.get("current_status", {}).get("online_availability") and listing.get("url"):
                 url = listing["url"]
                 if any(d in url for d in RETAILER_DOMAINS):
                     print(f"[PokeFinder] Direct URL found (fallback): {url[:80]}")
                     return url
-
     except Exception as e:
         print(f"[PokeFinder] get_direct_url error: {e}")
-
     return None
 
 
 async def fetch_price_from_json(trackalacker_url: str, retailer: str) -> float | None:
-    """Fetch current price from the .json endpoint for price polling."""
     slug = extract_slug(trackalacker_url)
     if not slug:
         return None
     try:
-        async with httpx.AsyncClient(follow_redirects=True, timeout=10, headers=HTTP_HEADERS) as c:
-            resp = await c.get(f"https://www.trackalacker.com/products/showcase/{slug}.json")
-            if resp.status_code != 200:
-                return None
-            data = resp.json()
+        session = await asyncio.to_thread(get_tl_session)
+        if not session:
+            return None
+        resp = await asyncio.to_thread(session.get, f"https://www.trackalacker.com/products/showcase/{slug}.json")
+        if resp.status_code != 200:
+            return None
+        data = resp.json()
         listings = data.get("product", {}).get("listings", [])
         retailer_upper = retailer.upper()
         for listing in listings:
             provider = listing.get("provider", {}).get("display_name", "").upper()
             if retailer_upper in provider or provider in retailer_upper:
-                current = listing.get("current_status", {})
-                price = current.get("price")
+                price = listing.get("current_status", {}).get("price")
                 if price is not None:
                     return float(price)
     except Exception as e:
@@ -152,7 +188,6 @@ async def fetch_price_from_json(trackalacker_url: str, retailer: str) -> float |
 
 
 async def poll_price(discord_msg_id: str, trackalacker_url: str, retailer: str, original_price: float):
-    """Poll price every 60s via .json endpoint. Mark ENDED when price changes."""
     elapsed = 0
     print(f"[PokeFinder] Polling started: {discord_msg_id} @ ${original_price}")
     while elapsed < POLL_MAX_TIME:
@@ -274,7 +309,8 @@ async def on_ready():
     print(f"[PokeFinder] Watching: {WATCH_CHANNELS}")
     for guild in client.guilds:
         print(f"[PokeFinder] Server: {guild.name}")
-    print("[PokeFinder] Using TrackaLacker .json API for direct URLs")
+    # Pre-warm login session
+    asyncio.create_task(asyncio.to_thread(get_tl_session))
 
 
 @client.event
@@ -293,32 +329,19 @@ async def on_message(message: discord.Message):
         print(f"[PokeFinder] Save failed: {restock['discord_msg_id']}")
         return
     print(f"[PokeFinder] Saved: {restock['product_name']} @ {restock['retailer']}")
-
-    # Fetch direct URL and update in background
     if restock.get("trackalacker_url") and restock.get("retailer") and restock.get("price") is not None:
         asyncio.create_task(fetch_and_update_url(
-            restock["discord_msg_id"],
-            restock["trackalacker_url"],
-            restock["retailer"],
-            restock["price"]
+            restock["discord_msg_id"], restock["trackalacker_url"],
+            restock["retailer"], restock["price"]
         ))
-
-    # Poll price
     if restock.get("trackalacker_url") and restock.get("price") is not None:
         asyncio.create_task(poll_price(
-            restock["discord_msg_id"],
-            restock["trackalacker_url"],
-            restock["retailer"],
-            restock["price"]
+            restock["discord_msg_id"], restock["trackalacker_url"],
+            restock["retailer"], restock["price"]
         ))
-
-    # SMS
     asyncio.create_task(asyncio.to_thread(
-        send_sms_notifications,
-        restock["product_name"],
-        restock["retailer"],
-        restock.get("price"),
-        restock.get("trackalacker_url", "")
+        send_sms_notifications, restock["product_name"], restock["retailer"],
+        restock.get("price"), restock.get("trackalacker_url", "")
     ))
 
 
