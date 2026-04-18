@@ -797,7 +797,12 @@ function launchPokeball(fromEl){
     }
   })(performance.now());
 }
-['nav-calendar','nav-alerts','nav-scanning'].forEach(id=>{const el=document.getElementById(id);if(!el)return;el.addEventListener('mouseenter',e=>{if(window._currentUser)return;launchPokeball(e.currentTarget);});el.addEventListener('click',e=>{e.preventDefault();if(window._currentUser){const name=window._currentUser.user_metadata?.full_name||window._currentUser.user_metadata?.name||window._currentUser.email?.split('@')[0]||'TRAINER';openDashboard(name);}});});
+['nav-calendar','nav-alerts','nav-scanning'].forEach(id=>{
+  const el=document.getElementById(id);if(!el)return;
+  el.addEventListener('mouseenter',e=>{launchPokeball(e.currentTarget);});
+  el.addEventListener('click',e=>{e.preventDefault();if(window._currentUser){const name=window._currentUser.user_metadata?.full_name||window._currentUser.user_metadata?.name||window._currentUser.email?.split('@')[0]||'TRAINER';openDashboard(name);
+  if(user.email==='ahmupatel2@gmail.com'){initAdminPanel();}}});
+});
 
 // ── POKEBALL SPIN ──
 const pbContainer=document.getElementById('pokeball-container');
@@ -1599,6 +1604,8 @@ function initAuth(){
       'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVma2VhZnp6Y3Z1cGpzcmlub3RpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYwMTk4MzcsImV4cCI6MjA5MTU5NTgzN30.3wpjIrVtcWQDXbFhox_86cuhNak7tx-KH34unsCU-DM'
     );
     window._sb=sb;
+    // Load theme color for all users immediately
+    sb.from('settings').select('value').eq('key','theme_color').single().then(({data})=>{if(data?.value)applyThemeColor(data.value,false);});
 
     // Handle auth state — covers both existing sessions and OAuth returns
     sb.auth.onAuthStateChange((ev,session)=>{
@@ -1662,6 +1669,8 @@ function onSignedOut(){window._currentUser=null;
 const _s=document.createElement('script');
 _s.src='https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js';
 _s.onload=initAuth;
+// Also load theme via direct fetch for non-logged-in users
+fetch('https://efkeafzzcvupjsrinoti.supabase.co/rest/v1/settings?key=eq.theme_color&select=value',{headers:{'apikey':'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVma2VhZnp6Y3Z1cGpzcmlub3RpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYwMTk4MzcsImV4cCI6MjA5MTU5NTgzN30.3wpjIrVtcWQDXbFhox_86cuhNak7tx-KH34unsCU-DM','Content-Type':'application/json'}}).then(r=>r.json()).then(d=>{if(d[0]?.value)applyThemeColor(d[0].value,false);}).catch(()=>{});
 // Load immediately so OAuth redirects don't miss the session
 document.head.appendChild(_s);
 
