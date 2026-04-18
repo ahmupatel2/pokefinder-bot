@@ -1,0 +1,1676 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>POKEFINDER</title>
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Syncopate:wght@400;700&family=DM+Mono:wght@300;400;500&family=IBM+Plex+Mono:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{margin:0;padding:0;box-sizing:border-box;}
+:root{
+  --bg:#010601;--bg2:#000;
+  --sp:#0d4020;--sp-mid:#1a6535;--sp-bright:#28a855;
+  --text:#8aaa8e;--text-dim:#3a6642;--text-hi:#b8d4bc;
+  --border:rgba(40,168,85,.12);--red:#c0392b;
+}
+html{scroll-behavior:smooth;}
+body{background:var(--bg);color:var(--text);font-family:'DM Mono',monospace;overflow-x:hidden;cursor:crosshair;}
+canvas#grid{position:fixed;top:0;left:0;width:100%;height:100%;z-index:0;pointer-events:none;opacity:.25;}
+.scanline{position:fixed;top:0;left:0;width:100%;height:100%;background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,.05) 2px,rgba(0,0,0,.05) 4px);z-index:1;pointer-events:none;}
+main{position:relative;z-index:2;}
+
+/* ── LANDING NAV ── */
+nav{position:fixed;top:0;left:0;right:0;display:flex;align-items:center;justify-content:space-between;padding:22px 48px;z-index:100;background:rgba(1,4,1,.88);backdrop-filter:blur(18px);border-bottom:1px solid rgba(20,77,40,.07);}
+.logo{font-family:'Syncopate',sans-serif;font-size:13px;font-weight:700;letter-spacing:.3em;color:var(--sp-bright);text-shadow:0 0 16px rgba(20,77,40,.8),0 0 36px rgba(20,77,40,.2);}
+.logo-p{cursor:pointer;transition:text-shadow .2s;}
+.logo-p:hover{text-shadow:0 0 24px rgba(40,168,85,1),0 0 48px rgba(40,168,85,.4);}
+.nav-right{display:flex;align-items:center;gap:40px;}
+.nav-link{font-size:10px;letter-spacing:.2em;color:var(--text-dim);text-decoration:none;font-family:'Share Tech Mono',monospace;cursor:crosshair;display:inline-flex;align-items:center;gap:8px;}
+.nav-link .char{display:inline-block;}
+.nav-link:hover .char{color:var(--sp-bright);text-shadow:0 0 10px rgba(29,107,53,.9);animation:charBounce .38s ease forwards;animation-delay:calc(var(--i)*.05s);}
+@keyframes charBounce{0%{transform:translateY(0);}38%{transform:translateY(-5px);}65%{transform:translateY(1px);}100%{transform:translateY(0);}}
+.dot{width:6px;height:6px;border-radius:50%;background:var(--sp-bright);box-shadow:0 0 7px rgba(29,107,53,.7);animation:dotP 2.5s ease-in-out infinite;}
+@keyframes dotP{0%,100%{opacity:1;box-shadow:0 0 7px rgba(29,107,53,.7);}50%{opacity:.3;box-shadow:none;}}
+
+/* ── LANDING HERO ── */
+.hero{min-height:100vh;display:flex;flex-direction:column;justify-content:center;padding:120px 48px 80px;position:relative;}
+.hero-tag{font-family:'Share Tech Mono',monospace;font-size:10px;letter-spacing:.4em;color:var(--sp-bright);margin-bottom:32px;opacity:0;animation:fadeUp .8s ease forwards .3s;}
+.hero-title{font-family:'Syncopate',sans-serif;font-size:clamp(52px,8vw,108px);font-weight:700;line-height:.9;letter-spacing:-.02em;color:var(--text-hi);margin-bottom:40px;opacity:0;animation:fadeUp .8s ease forwards .5s;}
+.hero-title span{color:var(--sp-bright);display:block;text-shadow:0 0 28px rgba(20,77,40,.55),0 0 60px rgba(20,77,40,.15);}
+.hero-sub{font-size:13px;color:var(--text);max-width:480px;line-height:1.8;letter-spacing:.05em;margin-bottom:56px;opacity:0;animation:fadeUp .8s ease forwards .7s;}
+.hero-actions{display:flex;align-items:center;gap:32px;opacity:0;animation:fadeUp .8s ease forwards .9s;}
+.btn-primary{font-family:'Share Tech Mono',monospace;font-size:11px;letter-spacing:.3em;color:var(--sp-bright);background:transparent;border:none;outline:none;padding:16px 40px;cursor:crosshair;position:relative;overflow:hidden;text-shadow:0 0 8px rgba(20,77,40,.5);transition:color .4s,text-shadow .4s;}
+.btn-primary::before{content:'';position:absolute;inset:0;background:radial-gradient(ellipse at 50% 130%,rgba(20,77,40,.2) 0%,transparent 65%);opacity:0;transform:scaleY(.15);transform-origin:bottom;transition:opacity .5s,transform .5s cubic-bezier(.23,1,.32,1);}
+.btn-primary::after{content:'';position:absolute;bottom:0;left:8%;width:84%;height:1px;background:linear-gradient(90deg,transparent,var(--sp-bright),transparent);box-shadow:0 0 5px var(--sp-bright);transform:scaleX(0);transition:transform .4s ease .1s;}
+.btn-primary:hover::before{opacity:1;transform:scaleY(1);}
+.btn-primary:hover::after{transform:scaleX(1);}
+.btn-primary:hover{color:#3da85a;text-shadow:0 0 14px rgba(29,107,53,.9),0 0 28px rgba(29,107,53,.3);}
+.btn-ghost{font-family:'Share Tech Mono',monospace;font-size:11px;letter-spacing:.3em;color:var(--text);background:transparent;border:none;outline:none;padding:16px 40px;cursor:crosshair;position:relative;overflow:hidden;transition:color .3s;}
+.btn-ghost::after{content:attr(data-text);position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--sp-bright);font-family:'Share Tech Mono',monospace;font-size:11px;letter-spacing:.3em;clip-path:inset(0 100% 0 0);transition:clip-path .5s cubic-bezier(.77,0,.18,1);text-shadow:0 0 10px rgba(20,77,40,.7);}
+.btn-ghost:hover::after{clip-path:inset(0 0% 0 0);}
+.btn-ghost:hover{color:transparent;}
+.hero-stats{position:absolute;right:48px;top:50%;transform:translateY(-50%);display:flex;flex-direction:column;gap:32px;opacity:0;animation:fadeLeft .8s ease forwards 1.1s;}
+.stat{text-align:right;border-right:1px solid rgba(20,77,40,.2);padding-right:20px;}
+.stat-num{font-family:'Syncopate',sans-serif;font-size:28px;font-weight:700;color:var(--sp-bright);display:block;text-shadow:0 0 14px rgba(20,77,40,.55);}
+.stat-label{font-size:9px;letter-spacing:.3em;color:var(--text-dim);font-family:'Share Tech Mono',monospace;}
+@keyframes fadeUp{from{opacity:0;transform:translateY(24px);}to{opacity:1;transform:translateY(0);}}
+@keyframes fadeLeft{from{opacity:0;transform:translateY(-50%) translateX(24px);}to{opacity:1;transform:translateY(-50%) translateX(0);}}
+
+/* ── TICKER ── */
+.ticker-wrap{width:100%;background:rgba(20,77,40,.025);border-top:1px solid var(--border);border-bottom:1px solid var(--border);overflow:hidden;padding:12px 0;position:relative;z-index:2;}
+.ticker-label{position:absolute;left:0;top:0;bottom:0;background:var(--sp);display:flex;align-items:center;padding:0 20px;font-family:'Share Tech Mono',monospace;font-size:9px;letter-spacing:.3em;color:#6e8e74;z-index:3;white-space:nowrap;box-shadow:4px 0 14px rgba(20,77,40,.3);}
+.ticker-track{display:flex;gap:80px;animation:ticker 35s linear infinite;padding-left:110px;white-space:nowrap;}
+.ticker-item{display:flex;align-items:center;gap:12px;font-family:'Share Tech Mono',monospace;font-size:11px;color:var(--text);letter-spacing:.1em;}
+.ticker-item .live{color:var(--red);}.ticker-item .up{color:var(--sp-bright);}.ticker-item .name{color:var(--text-hi);}
+@keyframes ticker{from{transform:translateX(0);}to{transform:translateX(-50%);}}
+
+/* ── SECTIONS ── */
+.section{padding:100px 48px;position:relative;}
+.section-tag{font-family:'Share Tech Mono',monospace;font-size:9px;letter-spacing:.4em;color:var(--sp-bright);margin-bottom:20px;display:flex;align-items:center;gap:12px;}
+.section-tag::before{content:'';display:block;width:24px;height:1px;background:var(--sp-bright);}
+.section-title{font-family:'Syncopate',sans-serif;font-size:clamp(24px,3.5vw,42px);font-weight:700;line-height:1.1;margin-bottom:60px;max-width:600px;}
+.features-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--border);}
+.feature{background:var(--bg);padding:40px 32px;position:relative;overflow:hidden;transition:background .3s;}
+.feature::before{content:'';position:absolute;top:0;left:0;width:100%;height:2px;background:var(--sp-bright);transform:scaleX(0);transform-origin:left;transition:transform .4s ease;}
+.feature:hover{background:#000;}.feature:hover::before{transform:scaleX(1);}
+.feat-num{font-family:'Syncopate',sans-serif;font-size:10px;color:var(--sp-bright);letter-spacing:.3em;margin-bottom:24px;opacity:.45;}
+.feat-title{font-family:'Syncopate',sans-serif;font-size:13px;font-weight:700;letter-spacing:.1em;margin-bottom:16px;}
+.feat-desc{font-size:11px;line-height:1.9;color:var(--text-dim);letter-spacing:.05em;}
+
+/* ── LIVE DEMO ── */
+.live-demo{margin-top:100px;padding:0 48px 100px;}
+.demo-window{background:#000;position:relative;overflow:hidden;border:1px solid rgba(20,77,40,.1);}
+.demo-topbar{display:flex;align-items:center;justify-content:space-between;padding:14px 24px;border-bottom:1px solid rgba(20,77,40,.06);background:rgba(20,77,40,.02);}
+.demo-title{font-family:'Share Tech Mono',monospace;font-size:10px;letter-spacing:.3em;color:var(--sp-bright);display:flex;align-items:center;gap:10px;}
+.demo-controls{display:flex;align-items:center;gap:8px;}
+.ctrl{width:10px;height:10px;border-radius:50%;}
+.ctrl-r{background:#2a0a0a;}.ctrl-y{background:#2a2208;}.ctrl-g{background:#081a0a;}
+.feed-header{display:grid;grid-template-columns:90px 1fr 120px 80px 100px 100px;padding:12px 28px;border-bottom:1px solid rgba(20,77,40,.04);}
+.feed-col{font-family:'Share Tech Mono',monospace;font-size:9px;letter-spacing:.2em;color:var(--text-dim);}
+.feed-row{display:grid;grid-template-columns:90px 1fr 120px 80px 100px 100px;padding:20px 28px;align-items:center;position:relative;cursor:crosshair;overflow:hidden;transition:background .15s;}
+.feed-row::before{content:'';position:absolute;inset:0;background:rgba(20,77,40,.12);opacity:0;transition:opacity .08s;pointer-events:none;z-index:0;}
+.feed-row::after{content:'';position:absolute;left:0;top:8%;bottom:8%;width:2px;background:var(--sp-bright);box-shadow:0 0 8px rgba(29,107,53,.7);opacity:0;transform:scaleY(0);transition:opacity .15s,transform .3s cubic-bezier(.23,1,.32,1);z-index:1;}
+.feed-row:hover::before{opacity:1;}
+.feed-row:hover::after{opacity:1;transform:scaleY(1);}
+.feed-cell{font-family:'Share Tech Mono',monospace;font-size:11px;letter-spacing:.05em;color:var(--text);transition:color .3s,text-shadow .3s;position:relative;z-index:2;}
+.feed-cell.accent{color:var(--sp-bright);}
+.feed-cell.name{color:#3a5a3e;font-size:10px;}
+.feed-cell.live-badge{display:inline-flex;align-items:center;gap:5px;font-size:9px;letter-spacing:.2em;color:var(--red);}
+.live-dot{width:5px;height:5px;border-radius:50%;background:var(--red);animation:dotP 1.5s ease-in-out infinite;}
+.badge{font-size:9px;letter-spacing:.15em;padding:3px 8px;}
+.badge-online{color:var(--sp-bright);}.badge-store{color:#2a4a2e;}
+
+/* ── POKEBALL / RADAR ── */
+.radar-wrap{position:absolute;right:48px;bottom:80px;width:180px;height:180px;}
+.radar-inner{width:180px;height:180px;position:relative;opacity:.18;transition:opacity .6s;}
+.radar-inner.hidden{opacity:0;pointer-events:none;}
+.radar-circle{position:absolute;border:1px solid var(--sp-bright);border-radius:50%;top:50%;left:50%;transform:translate(-50%,-50%);}
+.radar-sweep{position:absolute;top:50%;left:50%;width:50%;height:1px;transform-origin:left center;background:linear-gradient(90deg,transparent,var(--sp-bright));animation:radarSweep 3s linear infinite;}
+@keyframes radarSweep{from{transform:rotate(0deg);}to{transform:rotate(360deg);}}
+.pokeball-wrap{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;opacity:0;transition:opacity .5s;pointer-events:none;}
+.pokeball-wrap.visible{opacity:1;pointer-events:all;}
+.pb-label{position:absolute;right:calc(100% + 12px);top:50%;transform:translateY(-50%);display:flex;align-items:center;gap:10px;white-space:nowrap;opacity:0;transition:opacity .4s ease .4s;pointer-events:none;}
+.pokeball-wrap.visible .pb-label{opacity:1;}
+.pb-label-text{font-family:'Share Tech Mono',monospace;font-size:9px;letter-spacing:.25em;color:var(--sp-bright);text-shadow:0 0 8px rgba(20,77,40,.6);}
+.pb-arrow{display:flex;align-items:center;}
+.pb-arrow-line{width:22px;height:1px;background:linear-gradient(90deg,transparent,var(--sp-bright));}
+.pb-arrow-tip{width:0;height:0;border-top:3px solid transparent;border-bottom:3px solid transparent;border-left:5px solid var(--sp-bright);}
+.pokeball-container{position:relative;width:130px;height:130px;cursor:pointer;}
+.pb-half{position:absolute;left:0;width:130px;will-change:transform;}
+.pb-half-top{top:0;height:65px;transform-origin:center 65px;}
+.pb-half-bot{top:65px;height:65px;transform-origin:center 0px;}
+.pb-half svg{display:block;}
+.pb-band-overlay{position:absolute;top:calc(50% - 1px);left:0;right:0;height:2px;background:var(--sp-bright);box-shadow:0 0 6px rgba(29,107,53,.6);z-index:8;pointer-events:none;}
+.pb-center-glow{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:0;height:0;border-radius:50%;background:radial-gradient(circle,rgba(61,168,90,0) 0%,transparent 70%);z-index:9;pointer-events:none;}
+.pb-center-wrap{z-index:20;}
+.radar-pulse{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:10px;height:10px;border-radius:50%;background:rgba(20,77,40,.5);pointer-events:none;}
+@keyframes radarAbsorb{0%{width:10px;height:10px;opacity:.9;}100%{width:200px;height:200px;opacity:0;}}
+#flying-pb{position:fixed;pointer-events:none;z-index:999;width:32px;height:32px;opacity:0;}
+.corner-bracket{position:absolute;width:20px;height:20px;opacity:.2;}
+.corner-bracket.tl{top:16px;left:16px;border-top:1px solid var(--sp-bright);border-left:1px solid var(--sp-bright);}
+.corner-bracket.tr{top:16px;right:16px;border-top:1px solid var(--sp-bright);border-right:1px solid var(--sp-bright);}
+.corner-bracket.bl{bottom:16px;left:16px;border-bottom:1px solid var(--sp-bright);border-left:1px solid var(--sp-bright);}
+.footer{padding:60px 48px;border-top:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;}
+.footer-logo{font-family:'Syncopate',sans-serif;font-size:11px;font-weight:700;letter-spacing:.3em;color:var(--text-dim);}
+.footer-right{font-family:'Share Tech Mono',monospace;font-size:9px;letter-spacing:.2em;color:var(--text-dim);}
+
+/* ── SIGN IN OVERLAY ── */
+#signin-overlay{position:fixed;inset:0;z-index:500;background:#010401;display:flex;align-items:center;justify-content:center;opacity:0;pointer-events:none;transition:opacity .45s ease;}
+#signin-overlay.open{opacity:1;pointer-events:all;}
+#signin-overlay canvas{position:absolute;inset:0;pointer-events:none;width:100%;height:100%;}
+.signin-page{width:100%;max-width:420px;padding:0 32px;position:relative;z-index:10;opacity:0;transform:translateY(20px);transition:opacity .45s ease .15s,transform .45s ease .15s;}
+#signin-overlay.open .signin-page{opacity:1;transform:translateY(0);}
+.signin-close{position:absolute;top:32px;right:48px;z-index:20;font-family:'Share Tech Mono',monospace;font-size:10px;letter-spacing:.25em;color:var(--sp-bright);background:transparent;border:1px solid rgba(29,107,53,.4);outline:none;cursor:pointer;padding:8px 16px;transition:color .2s,border-color .2s,box-shadow .2s;text-shadow:0 0 8px rgba(20,77,40,.5);}
+.signin-close:hover{color:#3da85a;border-color:var(--sp-bright);box-shadow:0 0 12px rgba(20,77,40,.3);}
+.signin-logo{font-family:'Syncopate',sans-serif;font-size:11px;font-weight:700;letter-spacing:.35em;color:var(--sp-bright);text-align:center;margin-bottom:8px;text-shadow:0 0 16px rgba(20,77,40,.8);}
+.signin-tagline{font-family:'Share Tech Mono',monospace;font-size:9px;letter-spacing:.25em;color:var(--text-dim);text-align:center;margin-bottom:44px;}
+.signin-tabs{display:flex;margin-bottom:32px;border-bottom:1px solid rgba(20,77,40,.15);}
+.signin-tab{flex:1;font-family:'Share Tech Mono',monospace;font-size:10px;letter-spacing:.2em;padding:10px;text-align:center;background:transparent;border:none;outline:none;color:var(--text-dim);cursor:pointer;border-bottom:2px solid transparent;transition:all .2s;margin-bottom:-1px;}
+.signin-tab.active{color:var(--sp-bright);border-bottom-color:var(--sp-bright);}
+.oauth-grid{display:flex;flex-direction:column;gap:9px;margin-bottom:24px;}
+.oauth-btn{display:flex;align-items:center;gap:14px;padding:11px 18px;background:rgba(20,77,40,.04);border:1px solid rgba(20,77,40,.12);outline:none;cursor:pointer;font-family:'Share Tech Mono',monospace;font-size:10px;letter-spacing:.15em;color:var(--text);transition:all .2s;}
+.oauth-btn:hover{background:rgba(20,77,40,.1);border-color:rgba(29,107,53,.35);color:var(--text-hi);}
+.oauth-icon{width:18px;height:18px;flex-shrink:0;display:flex;align-items:center;justify-content:center;}
+.signin-divider{display:flex;align-items:center;gap:16px;margin-bottom:24px;}
+.signin-divider-line{flex:1;height:1px;background:rgba(20,77,40,.12);}
+.signin-divider-text{font-family:'Share Tech Mono',monospace;font-size:9px;letter-spacing:.2em;color:var(--text-dim);}
+.signin-input{display:block;width:100%;background:transparent;border:none;border-bottom:1px solid rgba(20,77,40,.2);outline:none;padding:10px 0;font-family:'Share Tech Mono',monospace;font-size:10px;letter-spacing:.1em;color:var(--text-hi);margin-bottom:14px;transition:border-color .2s;}
+.signin-input::placeholder{color:var(--text-dim);}
+.signin-input:focus{border-bottom-color:var(--sp-bright);}
+.signin-submit{width:100%;margin-top:8px;background:transparent;border:none;outline:none;padding:12px;font-family:'Share Tech Mono',monospace;font-size:10px;letter-spacing:.3em;color:var(--sp-bright);cursor:pointer;position:relative;text-shadow:0 0 8px rgba(20,77,40,.5);transition:text-shadow .3s;}
+.signin-submit:hover{text-shadow:0 0 14px rgba(29,107,53,.9),0 0 28px rgba(29,107,53,.3);}
+.signin-submit::after{content:'';position:absolute;bottom:0;left:10%;width:80%;height:1px;background:linear-gradient(90deg,transparent,var(--sp-bright),transparent);transform:scaleX(0);transition:transform .3s;}
+.signin-submit:hover::after{transform:scaleX(1);}
+
+/* ── ADMIN MODAL ── */
+#admin-modal{position:fixed;inset:0;z-index:600;background:rgba(1,6,1,.92);backdrop-filter:blur(12px);display:flex;align-items:center;justify-content:center;opacity:0;pointer-events:none;transition:opacity .3s;}
+#admin-modal.open{opacity:1;pointer-events:all;}
+.admin-box{background:#010801;border:1px solid rgba(40,168,85,.2);padding:40px 48px;width:340px;position:relative;}
+.admin-tag{font-family:'Share Tech Mono',monospace;font-size:8px;letter-spacing:.4em;color:var(--text-dim);margin-bottom:20px;}
+.admin-title{font-family:'Syncopate',sans-serif;font-size:13px;font-weight:700;letter-spacing:.2em;color:var(--sp-bright);margin-bottom:28px;text-shadow:0 0 12px rgba(40,168,85,.4);}
+.admin-input{width:100%;background:transparent;border:none;border-bottom:1px solid rgba(40,168,85,.25);outline:none;padding:10px 0;font-family:'Share Tech Mono',monospace;font-size:18px;letter-spacing:.5em;color:var(--text-hi);margin-bottom:24px;transition:border-color .2s;text-align:center;}
+.admin-input:focus{border-bottom-color:var(--sp-bright);}
+.admin-enter{width:100%;background:transparent;border:none;outline:none;padding:12px;font-family:'Share Tech Mono',monospace;font-size:10px;letter-spacing:.3em;color:var(--sp-bright);cursor:pointer;position:relative;text-shadow:0 0 8px rgba(20,77,40,.5);transition:text-shadow .3s;}
+.admin-enter:hover{text-shadow:0 0 14px rgba(29,107,53,.9);}
+.admin-enter::after{content:'';position:absolute;bottom:0;left:10%;width:80%;height:1px;background:linear-gradient(90deg,transparent,var(--sp-bright),transparent);transform:scaleX(0);transition:transform .3s;}
+.admin-enter:hover::after{transform:scaleX(1);}
+.admin-error{font-family:'Share Tech Mono',monospace;font-size:9px;letter-spacing:.2em;color:var(--red);text-align:center;height:16px;margin-bottom:8px;}
+.admin-close-btn{position:absolute;top:12px;right:16px;font-family:'Share Tech Mono',monospace;font-size:9px;color:var(--text-dim);background:none;border:none;cursor:pointer;}
+.admin-close-btn:hover{color:var(--sp-bright);}
+
+/* ════════════════════════════════════
+   DASHBOARD
+════════════════════════════════════ */
+#dashboard{
+  position:fixed;inset:0;z-index:300;
+  background:#030804;
+  display:none;
+  flex-direction:column;
+}
+#dashboard.open{
+  display:flex;
+  animation:dbFadeIn .45s ease forwards;
+}
+@keyframes dbFadeIn{from{opacity:0;}to{opacity:1;}}
+
+/* DASHBOARD NAV */
+.db-nav{
+  height:52px;flex-shrink:0;
+  display:flex;align-items:center;justify-content:space-between;
+  padding:0 48px;
+  background:rgba(3,8,4,.96);backdrop-filter:blur(18px);
+  border-bottom:1px solid rgba(40,168,85,.07);
+  position:relative;z-index:10;
+}
+.db-logo{font-family:'Syncopate',sans-serif;font-size:12px;font-weight:700;letter-spacing:.32em;color:var(--sp-bright);text-shadow:0 0 16px rgba(40,168,85,.6);}
+.db-tabs{display:flex;align-items:center;}
+.db-tab{
+  font-family:'Share Tech Mono',monospace;font-size:10px;letter-spacing:.25em;
+  color:var(--text-dim);background:transparent;border:none;outline:none;
+  padding:8px 28px;cursor:crosshair;position:relative;transition:color .25s;
+}
+.db-tab::after{
+  content:'';position:absolute;bottom:-1px;left:20%;width:60%;height:1px;
+  background:var(--sp-bright);box-shadow:0 0 6px var(--sp-bright);
+  transform:scaleX(0);transition:transform .35s cubic-bezier(.23,1,.32,1);
+}
+.db-tab:hover{color:var(--text);}
+.db-tab.active{color:var(--sp-bright);}
+.db-tab.active::after{transform:scaleX(1);}
+.db-nav-right{display:flex;align-items:center;gap:24px;}
+.db-stat{text-align:right;}
+.db-stat-num{font-family:'Syncopate',sans-serif;font-size:16px;font-weight:700;color:var(--sp-bright);text-shadow:0 0 10px rgba(40,168,85,.4);}
+.db-stat-label{font-family:'Share Tech Mono',monospace;font-size:7px;letter-spacing:.2em;color:var(--text-dim);display:block;margin-top:1px;}
+.db-bell{width:30px;height:30px;display:flex;align-items:center;justify-content:center;cursor:crosshair;position:relative;}
+.db-bell svg{width:14px;height:14px;stroke:var(--text-dim);fill:none;transition:stroke .2s;}
+.db-bell:hover svg{stroke:var(--sp-bright);}
+.db-bell-pip{position:absolute;top:-1px;right:-1px;width:6px;height:6px;border-radius:50%;background:var(--red);box-shadow:0 0 5px rgba(192,57,43,.6);animation:dotP 2s ease-in-out infinite;}
+.db-username{font-family:'Share Tech Mono',monospace;font-size:10px;letter-spacing:.18em;color:var(--sp-bright);text-shadow:0 0 8px rgba(40,168,85,.3);}
+.db-exit-btn{font-family:'Share Tech Mono',monospace;font-size:9px;letter-spacing:.15em;color:var(--text-dim);background:none;border:none;cursor:crosshair;padding:0;transition:color .2s;}
+.db-exit-btn:hover{color:var(--sp-bright);}
+
+/* DASHBOARD CONTENT */
+.db-body{flex:1;overflow:hidden;position:relative;}
+.db-pane{
+  position:absolute;inset:0;
+  overflow-y:auto;
+  padding:44px 48px 48px;
+  opacity:0;pointer-events:none;
+  transform:translateY(10px);
+  transition:opacity .35s ease,transform .35s ease;
+}
+.db-pane.active{opacity:1;pointer-events:all;transform:translateY(0);}
+.db-pane::-webkit-scrollbar{width:2px;}
+.db-pane::-webkit-scrollbar-thumb{background:rgba(40,168,85,.15);}
+
+/* PANE HEADER — compact */
+.db-pane-header{display:flex;align-items:baseline;gap:16px;margin-bottom:36px;}
+.db-pane-label{font-family:'Share Tech Mono',monospace;font-size:9px;letter-spacing:.35em;color:var(--text-dim);}
+.db-live-pip{width:6px;height:6px;border-radius:50%;background:var(--red);box-shadow:0 0 6px rgba(192,57,43,.7);display:inline-block;margin-right:8px;animation:dotP 1.5s ease-in-out infinite;flex-shrink:0;}
+
+/* FILTER ROW */
+.db-filters{display:flex;align-items:center;margin-bottom:28px;border-bottom:1px solid rgba(40,168,85,.06);}
+.db-filter{font-family:'Share Tech Mono',monospace;font-size:9px;letter-spacing:.22em;color:var(--text-dim);background:transparent;border:none;outline:none;padding:6px 18px;cursor:crosshair;position:relative;transition:color .2s;}
+.db-filter::after{content:'';position:absolute;bottom:-1px;left:0;right:0;height:1px;background:var(--sp-bright);transform:scaleX(0);transform-origin:left;transition:transform .28s ease;}
+.db-filter:hover{color:var(--text);}
+.db-filter.active{color:var(--sp-bright);}
+.db-filter.active::after{transform:scaleX(1);}
+
+/* ── LIVE FEED TABLE ── */
+.db-table-head{
+  display:grid;
+  grid-template-columns:70px 1fr 120px 75px 90px 80px;
+  padding:0 0 10px;
+  border-bottom:1px solid rgba(40,168,85,.08);
+  margin-bottom:0;
+}
+.db-th{font-family:'Share Tech Mono',monospace;font-size:8px;letter-spacing:.22em;color:var(--text-dim);}
+
+.db-row{
+  display:grid;
+  grid-template-columns:70px 1fr 120px 75px 90px 80px;
+  padding:15px 0;
+  border-bottom:1px solid rgba(40,168,85,.04);
+  position:relative;cursor:crosshair;
+  animation:dbRowIn .45s ease both;
+  opacity:0;
+}
+@keyframes dbRowIn{from{opacity:0;transform:translateX(-6px);}to{opacity:1;transform:translateX(0);}}
+
+/* Hover: left bar + bg — NO extra divs, pure CSS */
+.db-row::before{
+  content:'';position:absolute;left:-48px;right:-48px;top:0;bottom:0;
+  background:rgba(40,168,85,.03);opacity:0;transition:opacity .12s;pointer-events:none;
+}
+.db-row::after{
+  content:'';position:absolute;left:-48px;top:12%;bottom:12%;width:2px;
+  background:var(--sp-bright);box-shadow:0 0 8px rgba(40,168,85,.5);
+  opacity:0;transform:scaleY(0);transition:opacity .1s,transform .28s cubic-bezier(.23,1,.32,1);
+}
+.db-row:hover::before{opacity:1;}
+.db-row:hover::after{opacity:1;transform:scaleY(1);}
+
+.db-cell{font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.02em;color:var(--text-dim);position:relative;z-index:1;}
+.db-cell.c-status-live{font-family:'Share Tech Mono',monospace;font-size:8px;letter-spacing:.2em;color:var(--red);display:flex;align-items:center;gap:4px;}
+.db-cell.c-status-live::before{content:'';width:4px;height:4px;border-radius:50%;background:var(--red);flex-shrink:0;animation:dotP 1.5s ease-in-out infinite;}
+.db-cell.c-status-ended{font-family:'Share Tech Mono',monospace;font-size:8px;letter-spacing:.2em;color:var(--text-dim);opacity:.4;}
+.db-cell.c-status-incoming{font-family:'Share Tech Mono',monospace;font-size:8px;letter-spacing:.2em;color:#7a6a1a;}
+.db-cell.c-product{color:#6e8a72;font-size:11px;}
+.db-product-link{color:inherit;text-decoration:none;cursor:pointer;}
+.db-product-link:visited{color:var(--sp-bright);}
+.db-product-link:active{color:var(--sp-bright);}
+.db-cell.c-retailer{color:var(--sp-bright);}
+.db-cell.c-price{color:var(--text);}
+.db-cell.c-avail-online{color:var(--sp-bright);font-size:9px;}
+.db-cell.c-avail-store{color:var(--text-dim);font-size:9px;}
+.db-cell.c-time{color:var(--text-dim);font-size:10px;}
+
+/* ── CALENDAR ── */
+.db-cal-group{margin-bottom:40px;}
+.db-cal-day{
+  font-family:'Share Tech Mono',monospace;font-size:8px;letter-spacing:.32em;
+  color:var(--sp-bright);margin-bottom:12px;
+  display:flex;align-items:center;gap:12px;
+}
+.db-cal-day::after{content:'';flex:1;height:1px;background:rgba(40,168,85,.07);}
+
+.db-drop{
+  display:grid;
+  grid-template-columns:64px 1fr 80px 80px;
+  align-items:center;
+  padding:14px 0;
+  border-bottom:1px solid rgba(40,168,85,.04);
+  position:relative;cursor:crosshair;
+  animation:dbRowIn .45s ease both;opacity:0;
+}
+.db-drop::before{content:'';position:absolute;left:-48px;right:-48px;top:0;bottom:0;background:rgba(40,168,85,.03);opacity:0;transition:opacity .12s;pointer-events:none;}
+.db-drop::after{content:'';position:absolute;left:-48px;top:12%;bottom:12%;width:2px;background:var(--sp-bright);box-shadow:0 0 8px rgba(40,168,85,.5);opacity:0;transform:scaleY(0);transition:opacity .1s,transform .28s cubic-bezier(.23,1,.32,1);}
+.db-drop:hover::before{opacity:1;}
+.db-drop:hover::after{opacity:1;transform:scaleY(1);}
+
+.db-drop-time{font-family:'Syncopate',sans-serif;font-size:12px;font-weight:700;color:var(--sp-bright);text-shadow:0 0 8px rgba(40,168,85,.3);position:relative;z-index:1;}
+.db-drop-ampm{font-family:'Share Tech Mono',monospace;font-size:7px;letter-spacing:.12em;color:var(--text-dim);display:block;margin-top:2px;}
+.db-drop-product{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--text-hi);position:relative;z-index:1;}
+.db-drop-retailer{font-family:'Share Tech Mono',monospace;font-size:8px;letter-spacing:.18em;color:var(--sp-bright);margin-top:3px;}
+.db-drop-price{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--text);text-align:right;position:relative;z-index:1;}
+.db-drop-avail{font-family:'Share Tech Mono',monospace;font-size:8px;letter-spacing:.1em;text-align:right;position:relative;z-index:1;}
+.db-drop-avail.online{color:var(--sp-bright);}
+.db-drop-avail.store{color:var(--text-dim);}
+
+/* ── ALERTS PANE ── */
+.db-alerts-wrap{max-width:480px;}
+.db-alerts-section{margin-bottom:44px;}
+.db-alerts-stitle{font-family:'Share Tech Mono',monospace;font-size:8px;letter-spacing:.3em;color:var(--text-dim);margin-bottom:16px;}
+.db-toggle-row{display:flex;align-items:center;justify-content:space-between;padding:16px 0;border-bottom:1px solid rgba(40,168,85,.05);}
+.db-toggle-label{font-family:'DM Mono',monospace;font-size:12px;color:var(--text-hi);}
+.db-toggle{width:36px;height:18px;border-radius:9px;background:rgba(40,168,85,.07);position:relative;cursor:crosshair;transition:background .25s;}
+.db-toggle.on{background:rgba(40,168,85,.25);}
+.db-toggle::after{content:'';position:absolute;top:3px;left:3px;width:12px;height:12px;border-radius:50%;background:var(--text-dim);transition:all .25s cubic-bezier(.23,1,.32,1);}
+.db-toggle.on::after{left:21px;background:var(--sp-bright);box-shadow:0 0 6px rgba(40,168,85,.5);}
+.db-retailer-row{display:flex;align-items:center;justify-content:space-between;padding:14px 0;border-bottom:1px solid rgba(40,168,85,.05);cursor:crosshair;}
+.db-retailer-name{font-family:'Share Tech Mono',monospace;font-size:10px;letter-spacing:.2em;color:var(--text);}
+.db-check{width:18px;height:18px;border-radius:50%;border:1px solid var(--text-dim);position:relative;transition:all .22s;flex-shrink:0;}
+.db-retailer-row.checked .db-check{border-color:var(--sp-bright);background:rgba(40,168,85,.18);}
+.db-retailer-row.checked .db-check::after{content:'';position:absolute;top:4px;left:4px;width:8px;height:8px;border-radius:50%;background:var(--sp-bright);}
+
+/* STATUS BAR */
+.db-statusbar{
+  height:26px;flex-shrink:0;
+  display:flex;align-items:center;justify-content:space-between;
+  padding:0 48px;
+  border-top:1px solid rgba(40,168,85,.06);
+}
+.db-status-left{display:flex;gap:20px;}
+.db-status-item{font-family:'Share Tech Mono',monospace;font-size:8px;letter-spacing:.14em;color:var(--text-dim);display:flex;align-items:center;gap:5px;}
+.db-sdot{width:4px;height:4px;border-radius:50%;background:var(--sp-bright);animation:dotP 2.5s ease-in-out infinite;}
+.db-sdot.r{background:var(--red);}
+</style>
+</head>
+<body>
+
+<!-- Flying pokeball -->
+<svg id="flying-pb" viewBox="0 0 40 40" xmlns="http://www.w3.org/2000/svg">
+  <defs><filter id="fpg"><feGaussianBlur stdDeviation="1.5" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs>
+  <circle cx="20" cy="20" r="18" fill="#060606" stroke="#1d6b35" stroke-width="1.2" filter="url(#fpg)"/>
+  <path d="M2,20 A18,18 0 0,1 38,20" fill="#0e1a0e"/>
+  <path d="M2,20 A18,18 0 0,0 38,20" fill="#060404"/>
+  <line x1="2" y1="20" x2="38" y2="20" stroke="#1d6b35" stroke-width="1.4"/>
+  <circle cx="20" cy="20" r="5" fill="#080808" stroke="#1d6b35" stroke-width="1"/>
+  <circle cx="20" cy="20" r="2.5" fill="#030a04"/>
+</svg>
+
+<canvas id="grid"></canvas>
+<div class="scanline"></div>
+
+<!-- ADMIN MODAL -->
+<div id="admin-modal">
+  <div class="admin-box">
+    <button class="admin-close-btn" id="admin-close-btn">✕</button>
+    <div class="admin-tag">// ADMIN ACCESS</div>
+    <div class="admin-title">ENTER PASSCODE</div>
+    <input class="admin-input" id="admin-input" type="password" placeholder="····" maxlength="6" autocomplete="off"/>
+    <div class="admin-error" id="admin-error"></div>
+    <button class="admin-enter" id="admin-enter">ACCESS SYSTEM</button>
+  </div>
+</div>
+
+<!-- SIGN IN OVERLAY -->
+<div id="signin-overlay">
+  <canvas id="signin-canvas"></canvas>
+  <button class="signin-close" id="signin-close">✕ CLOSE</button>
+  <div class="signin-page">
+    <div class="signin-logo">POKEFINDER</div>
+    <div class="signin-tagline">// RESTOCK INTELLIGENCE SYSTEM</div>
+    <div class="signin-tabs">
+      <button class="signin-tab active" id="tab-in">SIGN IN</button>
+      <button class="signin-tab" id="tab-up">SIGN UP</button>
+    </div>
+    <div class="oauth-grid">
+      <button class="oauth-btn" id="btn-google">
+        <div class="oauth-icon"><svg viewBox="0 0 18 18" fill="none"><path d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844c-.209 1.125-.843 2.078-1.796 2.717v2.258h2.908c1.702-1.567 2.684-3.875 2.684-6.615z" fill="#4A90E2"/><path d="M9 18c2.43 0 4.467-.806 5.956-2.184l-2.908-2.258c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 009 18z" fill="#34A853"/><path d="M3.964 10.707A5.41 5.41 0 013.682 9c0-.593.102-1.17.282-1.707V4.961H.957A8.996 8.996 0 000 9c0 1.452.348 2.827.957 4.039l3.007-2.332z" fill="#FBBC05"/><path d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 00.957 4.961L3.964 6.293C4.672 4.166 6.656 3.58 9 3.58z" fill="#EA4335"/></svg></div>
+        CONTINUE WITH GOOGLE
+      </button>
+      <button class="oauth-btn" id="btn-apple">
+        <div class="oauth-icon"><svg viewBox="0 0 18 18" fill="none"><path d="M12.72 0c-.8.05-1.74.54-2.29 1.17-.5.57-.93 1.43-.77 2.27.87.07 1.77-.44 2.3-1.08.5-.6.88-1.47.76-2.36zM15.9 6.12c-1.06-.65-2.26-.87-3.2-.87-.94 0-1.73.28-2.36.52-.45.17-.84.32-1.16.32-.35 0-.74-.15-1.2-.33-.62-.24-1.33-.51-2.1-.51-1.56 0-3.22.96-4.06 2.59C.54 10 .82 13.35 2.6 15.85c.64.88 1.47 1.88 2.56 1.88.49 0 .84-.16 1.22-.33.44-.19.94-.4 1.7-.4.77 0 1.24.21 1.7.4.4.17.77.33 1.28.33 1.13 0 1.97-1.07 2.61-1.95.37-.5.64-.97.82-1.32-1.47-.66-2.39-2.11-2.39-3.7 0-1.41.67-2.67 1.78-3.44z" fill="#a0a0a0"/></svg></div>
+        CONTINUE WITH APPLE
+      </button>
+      <button class="oauth-btn" id="btn-github">
+        <div class="oauth-icon"><svg viewBox="0 0 18 18" fill="none"><path d="M9 0C4.03 0 0 4.03 0 9c0 3.98 2.58 7.35 6.16 8.54.45.08.61-.2.61-.43v-1.5c-2.5.54-3.03-1.2-3.03-1.2-.41-1.04-1-1.32-1-1.32-.82-.56.06-.55.06-.55.9.06 1.38.93 1.38.93.8 1.37 2.1.97 2.61.74.08-.58.31-.97.57-1.19-2-.23-4.1-1-4.1-4.45 0-.98.35-1.79.93-2.42-.09-.23-.4-1.14.09-2.38 0 0 .76-.24 2.5.93A8.7 8.7 0 019 4.36a8.7 8.7 0 012.28.31c1.74-1.17 2.5-.93 2.5-.93.49 1.24.18 2.15.09 2.38.58.63.93 1.44.93 2.42 0 3.46-2.1 4.22-4.1 4.44.32.28.61.82.61 1.66v2.46c0 .24.16.52.62.43A9.01 9.01 0 0018 9c0-4.97-4.03-9-9-9z" fill="#6e8e74"/></svg></div>
+        CONTINUE WITH GITHUB
+      </button>
+      <button class="oauth-btn" id="btn-linkedin">
+        <div class="oauth-icon"><svg viewBox="0 0 18 18" fill="none"><path d="M15.25 1H2.75A1.75 1.75 0 001 2.75v12.5C1 16.216 1.784 17 2.75 17h12.5A1.75 1.75 0 0017 15.25V2.75A1.75 1.75 0 0015.25 1zM6.5 14H4V7.5h2.5V14zm-1.25-7.45a1.45 1.45 0 110-2.9 1.45 1.45 0 010 2.9zM14 14h-2.5v-3.25c0-.96-.38-1.5-1.13-1.5-.75 0-1.12.55-1.12 1.5V14H6.75V7.5H9.25v1.14c.39-.72 1.1-1.14 1.97-1.14 1.6 0 2.78 1.06 2.78 3.11V14z" fill="#4a90d9"/></svg></div>
+        CONTINUE WITH LINKEDIN
+      </button>
+    </div>
+    <div class="signin-divider"><div class="signin-divider-line"></div><div class="signin-divider-text">OR</div><div class="signin-divider-line"></div></div>
+    <div id="signin-fields">
+      <input class="signin-input" placeholder="EMAIL" type="email"/>
+      <input class="signin-input" placeholder="PASSWORD" type="password"/>
+    </div>
+    <button class="signin-submit" id="signin-submit">ENTER SYSTEM</button>
+  </div>
+</div>
+
+<!-- DASHBOARD -->
+<div id="dashboard">
+  <nav class="db-nav">
+    <div class="db-logo" id="db-logo" style="cursor:crosshair;" title="Back to home">POKEFINDER</div>
+    <div class="db-tabs">
+      <button class="db-tab active" data-pane="live">LIVE</button>
+      <button class="db-tab" data-pane="calendar">CALENDAR</button>
+      <button class="db-tab" data-pane="alerts">ALERTS</button>
+      <button class="db-tab" data-pane="admin" id="admin-tab" style="display:none;color:var(--red,#ff4444);">ADMIN</button>
+    </div>
+    <div class="db-nav-right">
+      <div class="db-stat">
+        <span class="db-stat-num" id="db-live-count">0</span>
+        <span class="db-stat-label">LIVE NOW</span>
+      </div>
+      <div class="db-stat">
+        <span class="db-stat-num" id="db-today-count">0</span>
+        <span class="db-stat-label">TODAY</span>
+      </div>
+      <div class="db-bell" id="db-bell">
+        <svg viewBox="0 0 24 24" stroke-width="1.5"><path d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <div class="db-bell-pip"></div>
+      </div>
+      <span class="db-username" id="db-username">TRAINER</span>
+      <button class="db-exit-btn" id="db-exit-btn">[EXIT]</button>
+    </div>
+  </nav>
+
+  <div class="db-body">
+    <!-- LIVE PANE -->
+    <div class="db-pane active" id="pane-live">
+      <div class="db-pane-header">
+        <span class="db-pane-label"><span class="db-live-pip"></span>LIVE RESTOCK FEED</span>
+      </div>
+      <div class="db-filters">
+        <button class="db-filter active" data-f="all">ALL</button>
+        <button class="db-filter" data-f="target">TARGET</button>
+        <button class="db-filter" data-f="walmart">WALMART</button>
+        <button class="db-filter" data-f="costco">COSTCO</button>
+        <button class="db-filter" data-f="sam">SAM'S</button>
+      </div>
+      <div class="db-table-head">
+        <span class="db-th">STATUS</span>
+        <span class="db-th">PRODUCT</span>
+        <span class="db-th">RETAILER</span>
+        <span class="db-th">PRICE</span>
+        <span class="db-th">TYPE</span>
+        <span class="db-th">TIME</span>
+      </div>
+      <div id="db-feed-rows"></div>
+    </div>
+
+    <!-- CALENDAR PANE -->
+    <div class="db-pane" id="pane-calendar">
+      <div class="db-pane-header">
+        <span class="db-pane-label">UPCOMING CONFIRMED DROPS</span>
+      </div>
+      <div id="db-cal-content"></div>
+    </div>
+
+    <!-- ALERTS PANE -->
+    <div class="db-pane" id="pane-alerts">
+      <div class="db-pane-header">
+        <span class="db-pane-label">ALERT PREFERENCES</span>
+      </div>
+      <div class="db-alerts-wrap">
+        <div class="db-alerts-section">
+          <div class="db-alerts-stitle">TEXT NOTIFICATIONS</div>
+          <div class="db-toggle-row"><span class="db-toggle-label">Enable text alerts</span><div class="db-toggle on" id="sms-toggle"></div></div>
+          <div style="margin-top:20px;">
+            <div style="margin-bottom:16px;">
+              <div style="font-family:'Share Tech Mono',monospace;font-size:8px;letter-spacing:.2em;color:var(--text-dim);margin-bottom:8px;">PHONE NUMBER</div>
+              <input id="alert-phone" type="tel" placeholder="10-digit number" style="width:100%;background:transparent;border:none;border-bottom:1px solid rgba(40,168,85,.2);outline:none;padding:10px 0;font-family:'Share Tech Mono',monospace;font-size:12px;color:var(--text-hi);transition:border-color .2s;" />
+            </div>
+            <div style="margin-bottom:20px;">
+              <div style="font-family:'Share Tech Mono',monospace;font-size:8px;letter-spacing:.2em;color:var(--text-dim);margin-bottom:8px;">CARRIER</div>
+              <select id="alert-carrier" style="width:100%;background:#030804;border:none;border-bottom:1px solid rgba(40,168,85,.2);outline:none;padding:10px 0;font-family:'Share Tech Mono',monospace;font-size:11px;color:var(--text-hi);cursor:crosshair;">
+                <option value="">SELECT CARRIER</option>
+                <option value="att">AT&T</option>
+                <option value="verizon">VERIZON</option>
+                <option value="tmobile">T-MOBILE</option>
+                <option value="sprint">SPRINT</option>
+                <option value="boost">BOOST MOBILE</option>
+                <option value="cricket">CRICKET</option>
+                <option value="metro">METRO PCS</option>
+                <option value="uscellular">US CELLULAR</option>
+              </select>
+            </div>
+          </div>
+        </div>
+        <div class="db-alerts-section">
+          <div class="db-alerts-stitle">RETAILERS TO GET TEXTED FOR</div>
+          <div class="db-retailer-row checked" data-retailer="TARGET"><span class="db-retailer-name">TARGET</span><div class="db-check"></div></div>
+          <div class="db-retailer-row checked" data-retailer="WALMART"><span class="db-retailer-name">WALMART</span><div class="db-check"></div></div>
+          <div class="db-retailer-row checked" data-retailer="COSTCO"><span class="db-retailer-name">COSTCO</span><div class="db-check"></div></div>
+          <div class="db-retailer-row checked" data-retailer="SAM'S CLUB"><span class="db-retailer-name">SAM'S CLUB</span><div class="db-check"></div></div>
+          <div class="db-retailer-row" data-retailer="AMAZON"><span class="db-retailer-name">AMAZON</span><div class="db-check"></div></div>
+          <div class="db-retailer-row" data-retailer="GAMESTOP"><span class="db-retailer-name">GAMESTOP</span><div class="db-check"></div></div>
+          <div class="db-retailer-row" data-retailer="BEST BUY"><span class="db-retailer-name">BEST BUY</span><div class="db-check"></div></div>
+        </div>
+        <button id="save-alerts-btn" style="font-family:'Share Tech Mono',monospace;font-size:10px;letter-spacing:.3em;color:var(--sp-bright);background:transparent;border:none;outline:none;padding:14px 0;cursor:crosshair;position:relative;text-shadow:0 0 8px rgba(40,168,85,.4);width:100%;text-align:left;">SAVE ALERT SETTINGS</button>
+        <div id="alerts-save-msg" style="font-family:'Share Tech Mono',monospace;font-size:9px;letter-spacing:.2em;color:var(--sp-bright);height:16px;"></div>
+      </div>
+    </div>
+
+    <!-- ADMIN PANE -->
+    <div class="db-pane" id="pane-admin">
+      <div class="db-pane-header">
+        <span class="db-pane-label" style="color:var(--red,#ff4444);">⚠ ADMIN PANEL</span>
+      </div>
+
+      <!-- RESCAN -->
+      <div style="margin-bottom:40px;">
+        <div style="font-family:'Share Tech Mono',monospace;font-size:8px;letter-spacing:.3em;color:var(--text-dim);margin-bottom:16px;">TOOLS</div>
+        <button id="admin-rescan-btn" style="font-family:'Share Tech Mono',monospace;font-size:10px;letter-spacing:.3em;color:var(--sp-bright);background:transparent;border:1px solid rgba(40,168,85,.2);outline:none;padding:12px 20px;cursor:crosshair;margin-right:12px;margin-bottom:10px;">↻ RESCAN LAST ALERT</button>
+        <div id="admin-rescan-msg" style="font-family:'Share Tech Mono',monospace;font-size:9px;letter-spacing:.2em;color:var(--sp-bright);height:16px;margin-top:8px;"></div>
+      </div>
+
+      <!-- COLOR THEME -->
+      <div style="margin-bottom:40px;">
+        <div style="font-family:'Share Tech Mono',monospace;font-size:8px;letter-spacing:.3em;color:var(--text-dim);margin-bottom:16px;">COLOR THEME</div>
+        <div style="display:flex;flex-wrap:wrap;gap:10px;margin-bottom:16px;">
+          <button class="theme-btn" data-color="#28a855" style="background:#28a855;width:32px;height:32px;border:2px solid transparent;cursor:crosshair;" title="Green (default)"></button>
+          <button class="theme-btn" data-color="#00bfff" style="background:#00bfff;width:32px;height:32px;border:2px solid transparent;cursor:crosshair;" title="Cyan"></button>
+          <button class="theme-btn" data-color="#ff6b35" style="background:#ff6b35;width:32px;height:32px;border:2px solid transparent;cursor:crosshair;" title="Orange"></button>
+          <button class="theme-btn" data-color="#a855f7" style="background:#a855f7;width:32px;height:32px;border:2px solid transparent;cursor:crosshair;" title="Purple"></button>
+          <button class="theme-btn" data-color="#ff4488" style="background:#ff4488;width:32px;height:32px;border:2px solid transparent;cursor:crosshair;" title="Pink"></button>
+          <button class="theme-btn" data-color="#fbbf24" style="background:#fbbf24;width:32px;height:32px;border:2px solid transparent;cursor:crosshair;" title="Gold"></button>
+          <button class="theme-btn" data-color="#ff4444" style="background:#ff4444;width:32px;height:32px;border:2px solid transparent;cursor:crosshair;" title="Red"></button>
+          <button class="theme-btn" data-color="#ffffff" style="background:#ffffff;width:32px;height:32px;border:2px solid transparent;cursor:crosshair;" title="White"></button>
+        </div>
+        <div style="display:flex;align-items:center;gap:12px;">
+          <div style="font-family:'Share Tech Mono',monospace;font-size:9px;color:var(--text-dim);">CUSTOM:</div>
+          <input type="color" id="custom-color-picker" value="#28a855" style="width:40px;height:28px;border:none;background:transparent;cursor:crosshair;padding:0;">
+          <button id="apply-custom-color" style="font-family:'Share Tech Mono',monospace;font-size:9px;letter-spacing:.2em;color:var(--sp-bright);background:transparent;border:none;outline:none;cursor:crosshair;">APPLY</button>
+        </div>
+      </div>
+
+      <!-- DELETE RESTOCKS -->
+      <div style="margin-bottom:40px;">
+        <div style="font-family:'Share Tech Mono',monospace;font-size:8px;letter-spacing:.3em;color:var(--text-dim);margin-bottom:16px;">DANGER ZONE</div>
+        <button id="admin-clear-ended-btn" style="font-family:'Share Tech Mono',monospace;font-size:10px;letter-spacing:.3em;color:#ff8844;background:transparent;border:1px solid rgba(255,136,68,.2);outline:none;padding:12px 20px;cursor:crosshair;margin-right:12px;margin-bottom:10px;">🗑 CLEAR ENDED DROPS</button>
+        <button id="admin-clear-all-btn" style="font-family:'Share Tech Mono',monospace;font-size:10px;letter-spacing:.3em;color:#ff4444;background:transparent;border:1px solid rgba(255,68,68,.2);outline:none;padding:12px 20px;cursor:crosshair;margin-bottom:10px;">⚠ CLEAR ALL DROPS</button>
+        <div id="admin-delete-msg" style="font-family:'Share Tech Mono',monospace;font-size:9px;letter-spacing:.2em;color:var(--sp-bright);height:16px;margin-top:8px;"></div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="db-statusbar">
+    <div class="db-status-left">
+      <div class="db-status-item"><div class="db-sdot"></div>BOT ACTIVE</div>
+      <div class="db-status-item"><div class="db-sdot"></div>SUPABASE CONNECTED</div>
+      <div class="db-status-item"><div class="db-sdot r"></div>REALTIME ON</div>
+    </div>
+    <div class="db-status-item" id="db-last-update">LAST UPDATE: —</div>
+  </div>
+</div>
+
+<!-- LANDING PAGE -->
+<div id="landing">
+<nav>
+  <div class="logo">
+    <span class="logo-p" id="logo-p">P</span><span>OKEFINDER</span>
+  </div>
+  <div class="nav-right">
+    <a href="#" class="nav-link" id="nav-calendar"></a>
+    <a href="#" class="nav-link" id="nav-alerts"></a>
+    <div class="nav-link" id="nav-scanning" style="cursor:crosshair;"><div class="dot"></div><span id="nav-scanning-text"></span></div>
+  </div>
+</nav>
+<main>
+  <section class="hero">
+    <div class="corner-bracket tl"></div><div class="corner-bracket tr"></div><div class="corner-bracket bl"></div>
+    <p class="hero-tag">// RESTOCK INTELLIGENCE SYSTEM v2.4</p>
+    <h1 class="hero-title">FIND IT<span>BEFORE</span>THEY DO.</h1>
+    <p class="hero-sub">Real-time Pokemon TCG restock intelligence. Drop calendar. Live alerts. Built for collectors who don't miss.</p>
+    <div class="hero-actions">
+      <button class="btn-primary" id="btn-access">ACCESS SYSTEM</button>
+      <button class="btn-ghost" data-text="VIEW LIVE FEED" id="btn-view-feed">VIEW LIVE FEED</button>
+    </div>
+    <div class="hero-stats">
+      <div class="stat"><span class="stat-num">12</span><span class="stat-label">RETAILERS TRACKED</span></div>
+      <div class="stat"><span class="stat-num">0.4s</span><span class="stat-label">AVG ALERT DELAY</span></div>
+      <div class="stat"><span class="stat-num">247</span><span class="stat-label">DROPS THIS MONTH</span></div>
+    </div>
+    <div class="radar-wrap" id="radar-wrap">
+      <div class="radar-inner" id="radar-inner">
+        <div class="radar-circle" style="width:160px;height:160px;"></div>
+        <div class="radar-circle" style="width:110px;height:110px;"></div>
+        <div class="radar-circle" style="width:60px;height:60px;"></div>
+        <div class="radar-sweep"></div>
+      </div>
+      <div class="pokeball-wrap" id="pokeball-wrap">
+        <div class="pb-label">
+          <span class="pb-label-text">SIGN IN HERE</span>
+          <div class="pb-arrow"><div class="pb-arrow-line"></div><div class="pb-arrow-tip"></div></div>
+        </div>
+        <div class="pokeball-container" id="pokeball-container">
+          <div class="pb-half pb-half-top" id="pb-top">
+            <svg width="130" height="65" viewBox="0 0 130 65" xmlns="http://www.w3.org/2000/svg">
+              <defs><radialGradient id="topGrad" cx="50%" cy="100%" r="90%"><stop offset="0%" stop-color="#1e6b38"/><stop offset="50%" stop-color="#0e3d1e"/><stop offset="100%" stop-color="#050f08"/></radialGradient></defs>
+              <path d="M5,65 A60,60 0 0,1 125,65 L85,65 A20,20 0 0,0 45,65 L5,65 Z" fill="url(#topGrad)" stroke="#1d6b35" stroke-width="1.8" stroke-linejoin="round"/>
+              <path d="M36,54 A38,38 0 0,1 94,54" fill="none" stroke="rgba(61,168,90,.1)" stroke-width=".8"/>
+            </svg>
+          </div>
+          <div class="pb-half pb-half-bot" id="pb-bot">
+            <svg width="130" height="65" viewBox="0 0 130 65" xmlns="http://www.w3.org/2000/svg">
+              <path d="M5,0 A60,60 0 0,0 125,0 L85,0 A20,20 0 0,1 45,0 L5,0 Z" fill="#050505" stroke="#1d6b35" stroke-width="1.8" stroke-linejoin="round"/>
+            </svg>
+          </div>
+          <div class="pb-band-overlay" id="pb-band" style="opacity:0;"></div>
+          <div class="pb-center-glow" id="pb-glow-ring"></div>
+          <div class="pb-center-wrap" id="pb-center-wrap" style="position:absolute;top:45px;left:45px;z-index:20;">
+            <svg width="40" height="40" viewBox="0 0 40 40">
+              <defs>
+                <radialGradient id="btnGrad" cx="50%" cy="50%" r="50%"><stop offset="0%" stop-color="#0a2010"/><stop offset="100%" stop-color="#040804"/></radialGradient>
+                <filter id="cg"><feGaussianBlur stdDeviation="2.5" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+              </defs>
+              <circle cx="20" cy="20" r="18" fill="#080808" stroke="#1d6b35" stroke-width="1.5" filter="url(#cg)"/>
+              <circle cx="20" cy="20" r="12" fill="#040404" stroke="#144d28" stroke-width="1"/>
+              <circle cx="20" cy="20" r="7" fill="url(#btnGrad)" stroke="#1d6b35" stroke-width="1.2" id="pb-inner-btn" style="cursor:pointer;"/>
+            </svg>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <div class="ticker-wrap">
+    <div class="ticker-label">LIVE</div>
+    <div class="ticker-track">
+      <div class="ticker-item"><span class="live">IN STOCK</span><span class="name">Prismatic Evolutions ETB</span><span>TARGET</span><span>$49.99</span></div>
+      <div class="ticker-item"><span class="up">INCOMING</span><span class="name">Surging Sparks Booster Bundle</span><span>WALMART</span><span>$24.99</span></div>
+      <div class="ticker-item"><span class="live">IN STOCK</span><span class="name">151 Ultra Premium Collection</span><span>COSTCO</span><span>$89.99</span></div>
+      <div class="ticker-item"><span class="up">TOMORROW</span><span class="name">Stellar Crown Booster Box</span><span>SAMS CLUB</span><span>$129.99</span></div>
+      <div class="ticker-item"><span class="live">IN STOCK</span><span class="name">Charizard ex Super Premium</span><span>TARGET</span><span>$44.99</span></div>
+      <div class="ticker-item"><span class="up">FRI 9AM</span><span class="name">Crown Zenith ETB</span><span>WALMART</span><span>$39.99</span></div>
+      <div class="ticker-item"><span class="live">IN STOCK</span><span class="name">Prismatic Evolutions ETB</span><span>TARGET</span><span>$49.99</span></div>
+      <div class="ticker-item"><span class="up">INCOMING</span><span class="name">Surging Sparks Booster Bundle</span><span>WALMART</span><span>$24.99</span></div>
+    </div>
+  </div>
+
+  <section class="section">
+    <p class="section-tag">INTELLIGENCE</p>
+    <h2 class="section-title">THE INFRASTRUCTURE FOR SERIOUS COLLECTORS.</h2>
+    <div class="features-grid">
+      <div class="feature"><div class="feat-num">01</div><div class="feat-title">LIVE RESTOCK FEED</div><div class="feat-desc">Millisecond-level alerts from the most active TCG communities. Trackalacker-powered. No noise. No lag.</div></div>
+      <div class="feature"><div class="feat-num">02</div><div class="feat-title">DROP CALENDAR</div><div class="feat-desc">Every confirmed upcoming release. Target. Walmart. Costco. Sam's Club. Sorted by date, time, and channel.</div></div>
+      <div class="feature"><div class="feat-num">03</div><div class="feat-title">INSTANT ALERTS</div><div class="feat-desc">Push notifications the second a drop goes live. Filter by retailer, product type, or price range.</div></div>
+    </div>
+  </section>
+
+  <div class="live-demo">
+    <p class="section-tag">LIVE FEED PREVIEW</p>
+    <div class="demo-window">
+      <div class="demo-topbar">
+        <div class="demo-title"><div class="live-dot"></div>RESTOCK MONITOR — ACTIVE</div>
+        <div class="demo-controls"><div class="ctrl ctrl-r"></div><div class="ctrl ctrl-y"></div><div class="ctrl ctrl-g"></div></div>
+      </div>
+      <div class="feed-header">
+        <div class="feed-col">STATUS</div><div class="feed-col">PRODUCT</div><div class="feed-col">RETAILER</div>
+        <div class="feed-col">PRICE</div><div class="feed-col">TYPE</div><div class="feed-col">TIME</div>
+      </div>
+      <div id="feedRows">
+        <div class="feed-row"><div class="feed-cell live-badge"><div class="live-dot"></div> LIVE</div><div class="feed-cell name" data-text="Prismatic Evolutions ETB">Prismatic Evolutions ETB</div><div class="feed-cell accent" data-text="TARGET">TARGET</div><div class="feed-cell">$49.99</div><div class="feed-cell"><span class="badge badge-online">ONLINE</span></div><div class="feed-cell">0:23 AGO</div></div>
+        <div class="feed-row"><div class="feed-cell" style="color:#2a4a2e;font-size:9px;letter-spacing:.15em;">INCOMING</div><div class="feed-cell name" data-text="Surging Sparks Booster Bundle 6-Pack">Surging Sparks Booster Bundle 6-Pack</div><div class="feed-cell accent" data-text="WALMART">WALMART</div><div class="feed-cell">$24.99</div><div class="feed-cell"><span class="badge badge-store">IN-STORE</span></div><div class="feed-cell">FRI 9:00AM</div></div>
+        <div class="feed-row"><div class="feed-cell live-badge"><div class="live-dot"></div> LIVE</div><div class="feed-cell name" data-text="151 Ultra Premium Collection">151 Ultra Premium Collection</div><div class="feed-cell accent" data-text="COSTCO">COSTCO</div><div class="feed-cell">$89.99</div><div class="feed-cell"><span class="badge badge-store">IN-STORE</span></div><div class="feed-cell">1:14 AGO</div></div>
+        <div class="feed-row"><div class="feed-cell" style="color:#2a4a2e;font-size:9px;letter-spacing:.15em;">TOMORROW</div><div class="feed-cell name" data-text="Stellar Crown Booster Box">Stellar Crown Booster Box</div><div class="feed-cell accent" data-text="SAM'S CLUB">SAM'S CLUB</div><div class="feed-cell">$129.99</div><div class="feed-cell"><span class="badge badge-online">ONLINE</span></div><div class="feed-cell">SAT 12:00PM</div></div>
+        <div class="feed-row"><div class="feed-cell" style="color:#142018;font-size:9px;letter-spacing:.15em;">ENDED</div><div class="feed-cell name" style="opacity:.28;" data-text="Charizard ex Super Premium Collection">Charizard ex Super Premium Collection</div><div class="feed-cell" style="color:#142018;" data-text="TARGET">TARGET</div><div class="feed-cell" style="opacity:.28;">$44.99</div><div class="feed-cell" style="opacity:.28;"><span class="badge badge-online">ONLINE</span></div><div class="feed-cell" style="opacity:.28;">3:41 AGO</div></div>
+      </div>
+    </div>
+  </div>
+
+  <footer class="footer">
+    <div class="footer-logo">POKEFINDER</div>
+    <div class="footer-right">// RESTOCK INTELLIGENCE — ALL RIGHTS RESERVED</div>
+  </footer>
+</main>
+</div><!-- end landing -->
+
+<script>
+
+// ── CANVAS ──
+function makeGrid(canvas){
+  const ctx=canvas.getContext('2d');
+  function resize(){canvas.width=canvas.offsetWidth||window.innerWidth;canvas.height=canvas.offsetHeight||window.innerHeight;}
+  resize();window.addEventListener('resize',resize);
+  const W=()=>canvas.width,H=()=>canvas.height;
+  const dots=Array.from({length:55},()=>({x:Math.random()*window.innerWidth,y:Math.random()*window.innerHeight,vx:(Math.random()-.5)*.18,vy:(Math.random()-.5)*.18,r:Math.random()*.8+.3,a:Math.random()*.32+.07}));
+  (function draw(){
+    ctx.clearRect(0,0,W(),H());
+    ctx.strokeStyle='rgba(20,77,40,.03)';ctx.lineWidth=.5;
+    for(let x=0;x<W();x+=60){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,H());ctx.stroke();}
+    for(let y=0;y<H();y+=60){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(W(),y);ctx.stroke();}
+    dots.forEach(d=>{d.x=(d.x+d.vx+W())%W();d.y=(d.y+d.vy+H())%H();ctx.beginPath();ctx.arc(d.x,d.y,d.r,0,Math.PI*2);ctx.fillStyle=`rgba(20,77,40,${d.a})`;ctx.fill();});
+    dots.forEach((a,i)=>dots.forEach((b,j)=>{if(j<=i)return;const dx=a.x-b.x,dy=a.y-b.y,d=Math.sqrt(dx*dx+dy*dy);if(d<95){ctx.beginPath();ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);ctx.strokeStyle=`rgba(20,77,40,${(1-d/95)*.05})`;ctx.lineWidth=.5;ctx.stroke();}}));
+    requestAnimationFrame(draw);
+  })();
+}
+makeGrid(document.getElementById('grid'));
+
+// ── NAV CHARS ──
+function splitChars(el,text){el.innerHTML=text.split('').map((c,i)=>`<span class="char" style="--i:${i}">${c}</span>`).join('');}
+splitChars(document.getElementById('nav-calendar'),'CALENDAR');
+splitChars(document.getElementById('nav-alerts'),'ALERTS');
+splitChars(document.getElementById('nav-scanning-text'),'SCANNING');
+
+// ── LANDING FEED SCRAMBLE ──
+const GLYPHS='ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789#@$%&';
+function scramble(el,dur=420){
+  const orig=el.dataset.text||el.textContent;if(!orig)return;
+  let s=0;el.style.color='#3da85a';el.style.textShadow='0 0 8px rgba(61,168,90,.7)';
+  const iv=setInterval(()=>{
+    if(s>=10){el.textContent=orig;el.style.color='';el.style.textShadow='';clearInterval(iv);return;}
+    const res=Math.floor(orig.length*(s/10));
+    el.textContent=orig.slice(0,res)+orig.slice(res).split('').map(()=>GLYPHS[Math.floor(Math.random()*GLYPHS.length)]).join('');
+    s++;
+  },dur/10);
+}
+function attachScramble(row){
+  let active=false;
+  row.addEventListener('mouseenter',()=>{
+    if(active)return;active=true;
+    row.style.background='rgba(20,77,40,.08)';
+    setTimeout(()=>{row.style.background='';},120);
+    row.querySelectorAll('[data-text]').forEach((el,i)=>setTimeout(()=>scramble(el,380),i*80));
+    setTimeout(()=>{active=false;},600);
+  });
+}
+document.querySelectorAll('.feed-row').forEach(attachScramble);
+
+// ── FLYING POKEBALL ──
+const flyingPb=document.getElementById('flying-pb');
+const radarInner=document.getElementById('radar-inner');
+const pokeballWrap=document.getElementById('pokeball-wrap');
+const radarWrap=document.getElementById('radar-wrap');
+let pbLaunched=false,pbActive=false;
+function launchPokeball(fromEl){
+  if(pbActive||pbLaunched)return;pbActive=true;
+  const from=fromEl.getBoundingClientRect(),to=radarWrap.getBoundingClientRect();
+  const sx=from.left+from.width/2-16,sy=from.top+from.height/2-16;
+  const ex=to.left+to.width/2-16,ey=to.top+to.height/2-16;
+  Object.assign(flyingPb.style,{left:sx+'px',top:sy+'px',opacity:'0',transform:'scale(.3)',transition:'none'});
+  const dur=1050,start=performance.now();
+  const mx=(sx+ex)/2-40,my=Math.min(sy,ey)-100;
+  (function step(now){
+    const t=Math.min((now-start)/dur,1);
+    const e=t<.5?2*t*t:(1-Math.pow(-2*t+2,2)/2);
+    const bx=(1-t)*(1-t)*sx+2*(1-t)*t*mx+t*t*ex;
+    const by=(1-t)*(1-t)*sy+2*(1-t)*t*my+t*t*ey;
+    const op=t<.1?t*10:t>.82?(1-t)/.18:1;
+    Object.assign(flyingPb.style,{left:bx+'px',top:by+'px',opacity:String(op),transform:`scale(${.3+e*.85}) rotate(${t*500}deg)`,transition:'none'});
+    if(t<1){requestAnimationFrame(step);}
+    else{
+      flyingPb.style.opacity='0';radarInner.classList.add('hidden');
+      setTimeout(()=>{
+        pokeballWrap.classList.add('visible');pbActive=false;pbLaunched=true;
+        const p=document.createElement('div');p.className='radar-pulse';
+        radarWrap.appendChild(p);p.style.animation='radarAbsorb .85s ease-out forwards';
+        setTimeout(()=>p.remove(),900);
+      },80);
+    }
+  })(performance.now());
+}
+['nav-calendar','nav-alerts','nav-scanning'].forEach(id=>{const el=document.getElementById(id);if(!el)return;el.addEventListener('mouseenter',e=>{if(window._currentUser)return;launchPokeball(e.currentTarget);});el.addEventListener('click',e=>{e.preventDefault();if(window._currentUser){const name=window._currentUser.user_metadata?.full_name||window._currentUser.user_metadata?.name||window._currentUser.email?.split('@')[0]||'TRAINER';openDashboard(name);}});});
+
+// ── POKEBALL SPIN ──
+const pbContainer=document.getElementById('pokeball-container');
+const pbTop=document.getElementById('pb-top');
+const pbBot=document.getElementById('pb-bot');
+const pbBand=document.getElementById('pb-band');
+const pbGlowRing=document.getElementById('pb-glow-ring');
+const pbCenterWrap=document.getElementById('pb-center-wrap');
+const pbInnerBtn=document.getElementById('pb-inner-btn');
+let spinA=null,topA=null,botA=null,centA=null,glowA=null,pbOpen=false;
+function cancelAll(){[spinA,topA,botA,centA,glowA].forEach(a=>{try{if(a)a.cancel();}catch(e){}});}
+pbContainer.addEventListener('mouseenter',()=>{
+  if(pbOpen)return;pbOpen=true;cancelAll();
+  spinA=pbContainer.animate([{transform:'rotate(0deg)'},{transform:'rotate(720deg)'}],{duration:2400,easing:'cubic-bezier(0.25,0.1,0.25,1)',fill:'forwards'});
+  topA=pbTop.animate([{transform:'translateY(0) scale(1)'},{transform:'translateY(-4px) scale(1.04)',offset:.08},{transform:'translateY(-12px) scale(1.14)',offset:.35},{transform:'translateY(-24px) scale(1.32)',offset:1}],{duration:2400,easing:'cubic-bezier(0.25,0.1,0.25,1)',fill:'forwards'});
+  botA=pbBot.animate([{transform:'translateY(0) scale(1)'},{transform:'translateY(4px) scale(1.04)',offset:.08},{transform:'translateY(12px) scale(1.14)',offset:.35},{transform:'translateY(24px) scale(1.32)',offset:1}],{duration:2400,easing:'cubic-bezier(0.25,0.1,0.25,1)',fill:'forwards'});
+  centA=pbCenterWrap.animate([{transform:'scale(1)'},{transform:'scale(1.05)',offset:.15},{transform:'scale(1.8)',offset:1}],{duration:2400,easing:'cubic-bezier(0.25,0.1,0.25,1)',fill:'forwards'});
+  glowA=pbGlowRing.animate([{width:'0px',height:'0px'},{width:'50px',height:'50px',offset:.5},{width:'70px',height:'70px'}],{duration:2400,easing:'ease-in-out',fill:'forwards'});
+  pbInnerBtn.style.fill='#1a5c2e';pbInnerBtn.style.stroke='#3da85a';
+});
+pbContainer.addEventListener('mouseleave',()=>{
+  if(!pbOpen)return;pbOpen=false;cancelAll();
+  spinA=pbContainer.animate([{transform:'rotate(720deg)'},{transform:'rotate(0deg)'}],{duration:600,easing:'ease-out',fill:'forwards'});
+  topA=pbTop.animate([{transform:'translateY(-24px) scale(1.32)'},{transform:'translateY(0) scale(1)'}],{duration:500,easing:'ease-out',fill:'forwards'});
+  botA=pbBot.animate([{transform:'translateY(24px) scale(1.32)'},{transform:'translateY(0) scale(1)'}],{duration:500,easing:'ease-out',fill:'forwards'});
+  centA=pbCenterWrap.animate([{transform:'scale(1.8)'},{transform:'scale(1)'}],{duration:500,easing:'ease-out',fill:'forwards'});
+  glowA=pbGlowRing.animate([{width:'70px',height:'70px'},{width:'0px',height:'0px'}],{duration:400,easing:'ease-out',fill:'forwards'});
+  pbInnerBtn.style.fill='#080808';pbInnerBtn.style.stroke='#1d6b35';
+});
+pbInnerBtn.addEventListener('click',()=>{
+  const o=document.getElementById('signin-overlay');
+  o.classList.add('open');
+  if(!o._grid){o._grid=true;makeGrid(document.getElementById('signin-canvas'));}
+});
+
+// ── ADMIN MODAL ──
+const adminModal=document.getElementById('admin-modal');
+const adminInput=document.getElementById('admin-input');
+const adminError=document.getElementById('admin-error');
+document.getElementById('logo-p').addEventListener('click',()=>{adminModal.classList.add('open');setTimeout(()=>adminInput.focus(),300);});
+document.getElementById('admin-close-btn').addEventListener('click',()=>{adminModal.classList.remove('open');adminInput.value='';adminError.textContent='';});
+function tryAdmin(){
+  if(adminInput.value==='1209'){adminModal.classList.remove('open');adminInput.value='';openDashboard('ADMIN');initAdminPanel();}
+  else{adminError.textContent='INVALID PASSCODE';adminInput.value='';adminInput.style.borderBottomColor='var(--red)';setTimeout(()=>{adminError.textContent='';adminInput.style.borderBottomColor='';},1500);}
+}
+document.getElementById('admin-enter').addEventListener('click',tryAdmin);
+adminInput.addEventListener('keydown',e=>{if(e.key==='Enter')tryAdmin();});
+
+// ── SIGN IN OVERLAY ──
+document.getElementById('btn-access').addEventListener('click',()=>{const o=document.getElementById('signin-overlay');o.classList.add('open');if(!o._grid){o._grid=true;makeGrid(document.getElementById('signin-canvas'));}});
+document.getElementById('btn-view-feed').addEventListener('click',()=>document.querySelector('.live-demo').scrollIntoView({behavior:'smooth'}));
+document.getElementById('signin-close').addEventListener('click',()=>document.getElementById('signin-overlay').classList.remove('open'));
+document.getElementById('tab-in').addEventListener('click',function(){this.classList.add('active');document.getElementById('tab-up').classList.remove('active');document.getElementById('signin-fields').innerHTML='<input class="signin-input" placeholder="EMAIL" type="email"/><input class="signin-input" placeholder="PASSWORD" type="password"/>';document.getElementById('signin-submit').textContent='ENTER SYSTEM';});
+document.getElementById('tab-up').addEventListener('click',function(){this.classList.add('active');document.getElementById('tab-in').classList.remove('active');document.getElementById('signin-fields').innerHTML='<input class="signin-input" placeholder="USERNAME" type="text"/><input class="signin-input" placeholder="EMAIL" type="email"/><input class="signin-input" placeholder="PASSWORD" type="password"/>';document.getElementById('signin-submit').textContent='CREATE ACCOUNT';});
+
+// ── LANDING FEED NEW ROWS ──
+const feedRowsEl=document.getElementById('feedRows');
+const liveItems=[['LIVE','Crown Zenith Elite Trainer Box','WALMART','$39.99','ONLINE','JUST NOW'],['INCOMING','Paradox Rift Booster Bundle','TARGET','$29.99','IN-STORE','SAT 10AM'],['LIVE',"Paldea Evolved ETB","SAM'S CLUB",'$44.99','ONLINE','0:05 AGO']];
+let fi=0;
+setInterval(()=>{
+  if(fi>=liveItems.length)return;
+  const item=liveItems[fi++];const row=document.createElement('div');row.className='feed-row';
+  const isLive=item[0]==='LIVE';
+  row.innerHTML=`<div class="feed-cell ${isLive?'live-badge':''}" style="${!isLive?'color:#2a4a2e;font-size:9px;letter-spacing:.15em;':''}">${isLive?'<div class="live-dot"></div> LIVE':item[0]}</div><div class="feed-cell name" data-text="${item[1]}">${item[1]}</div><div class="feed-cell accent" data-text="${item[2]}">${item[2]}</div><div class="feed-cell">${item[3]}</div><div class="feed-cell"><span class="badge ${item[4]==='ONLINE'?'badge-online':'badge-store'}">${item[4]}</span></div><div class="feed-cell">${item[5]}</div>`;
+  row.style.cssText='opacity:0;transform:translateX(-12px);';
+  feedRowsEl.insertBefore(row,feedRowsEl.firstChild);
+  requestAnimationFrame(()=>{row.style.transition='opacity .5s,transform .5s';row.style.opacity='1';row.style.transform='translateX(0)';});
+  attachScramble(row);
+},4500);
+
+// ── DASHBOARD ──
+// ── DASHBOARD DATA — real Supabase + fallback to sample ──
+const sampleFeedData=[
+  {status:'LIVE',product:'Prismatic Evolutions ETB',retailer:'TARGET',price:49.99,avail:'ONLINE',ts:new Date(Date.now()-2*60000)},
+  {status:'LIVE',product:'Surging Sparks Booster Bundle 6-Pack',retailer:'WALMART',price:24.99,avail:'IN-STORE',ts:new Date(Date.now()-8*60000)},
+  {status:'LIVE',product:'151 Ultra Premium Collection',retailer:'COSTCO',price:89.99,avail:'IN-STORE',ts:new Date(Date.now()-15*60000)},
+  {status:'ENDED',product:'Charizard ex Super Premium Collection',retailer:'TARGET',price:44.99,avail:'ONLINE',ts:new Date(Date.now()-42*60000)},
+  {status:'LIVE',product:'Crown Zenith Elite Trainer Box',retailer:'WALMART',price:39.99,avail:'ONLINE',ts:new Date(Date.now()-55*60000)},
+  {status:'ENDED',product:'Stellar Crown Booster Box',retailer:"SAM'S CLUB",price:129.99,avail:'ONLINE',ts:new Date(Date.now()-90*60000)},
+  {status:'LIVE',product:'Paradox Rift Booster Bundle',retailer:'TARGET',price:29.99,avail:'ONLINE',ts:new Date(Date.now()-110*60000)},
+];
+let dbFeedData=[...sampleFeedData];
+
+// Load real data from Supabase
+async function loadRealFeed(){
+  if(!window._sb)return;
+  try{
+    const{data,error}=await window._sb
+      .from('restocks')
+      .select('*')
+      .order('created_at',{ascending:false})
+      .limit(50);
+    if(error||!data||data.length===0)return; // keep sample data
+    dbFeedData=data.map(r=>({
+      status:r.status||'LIVE',
+      product:r.product_name,
+      retailer:r.retailer,
+      price:r.price||0,
+      avail:r.availability||'ONLINE',
+      ts:new Date(r.created_at),
+      url:r.url,
+      discord_msg_id:r.discord_msg_id
+    }));
+    renderDbFeed();
+  }catch(e){console.warn('Feed load error:',e);}
+}
+
+// Realtime subscription — new restocks appear instantly
+function subscribeRealtime(){
+  if(!window._sb)return;
+  window._sb
+    .channel('restocks-live')
+    .on('postgres_changes',{event:'INSERT',schema:'public',table:'restocks'},payload=>{
+      const r=payload.new;
+      dbFeedData.unshift({
+        status:r.status||'LIVE',
+        product:r.product_name,
+        retailer:r.retailer,
+        price:r.price||0,
+        avail:r.availability||'ONLINE',
+        ts:new Date(r.created_at),
+        url:r.url,
+        discord_msg_id:r.discord_msg_id
+      });
+      if(dbFeedData.length>50)dbFeedData.pop();
+      renderDbFeed();
+      // Flash status bar
+      const sb=document.querySelector('.db-statusbar');
+      if(sb){sb.style.borderTopColor='rgba(40,168,85,.4)';setTimeout(()=>{sb.style.borderTopColor='';},600);}
+    })
+    .on('postgres_changes',{event:'UPDATE',schema:'public',table:'restocks'},payload=>{
+      const r=payload.new;
+      const idx=dbFeedData.findIndex(d=>d.discord_msg_id===r.discord_msg_id);
+      if(idx>-1){
+        if(r.status) dbFeedData[idx].status=r.status;
+        if(r.url) dbFeedData[idx].url=r.url;
+        renderDbFeed();
+      }
+    })
+    .subscribe();
+}
+const dbCalData=[
+  {date:'TODAY',time:'10:00',ampm:'AM',product:'Prismatic Evolutions Booster Box',retailer:'TARGET',price:199.99,avail:'online'},
+  {date:'TODAY',time:'12:00',ampm:'PM',product:'Surging Sparks ETB Wave 2',retailer:'WALMART',price:49.99,avail:'store'},
+  {date:'TOMORROW',time:'9:00',ampm:'AM',product:'Stellar Crown Ultra Premium Collection',retailer:'COSTCO',price:89.99,avail:'store'},
+  {date:'TOMORROW',time:'11:00',ampm:'AM',product:'Crown Zenith Booster Bundle',retailer:"SAM'S CLUB",price:24.99,avail:'online'},
+  {date:'FRI APR 17',time:'10:00',ampm:'AM',product:'Paradox Rift Booster Box',retailer:'TARGET',price:139.99,avail:'online'},
+  {date:'FRI APR 17',time:'3:00',ampm:'PM',product:'Paldea Evolved ETB Restock',retailer:'WALMART',price:44.99,avail:'store'},
+  {date:'SAT APR 18',time:'8:00',ampm:'AM',product:'151 Elite Trainer Box',retailer:'COSTCO',price:59.99,avail:'store'},
+];
+
+function timeAgo(d){const m=Math.floor((Date.now()-d)/60000);if(m<1)return'JUST NOW';if(m<60)return m+'m AGO';return Math.floor(m/60)+'h AGO';}
+
+let dbFilter='all';
+function renderDbFeed(){
+  const el=document.getElementById('db-feed-rows');
+  const data=(dbFilter==='all'?dbFeedData:dbFeedData.filter(r=>r.retailer.toLowerCase().includes(dbFilter))).slice(0,10);
+  let live=0;
+  el.innerHTML='';
+  data.forEach((item,i)=>{
+    if(item.status==='LIVE')live++;
+    const row=document.createElement('div');
+    row.className='db-row';
+    row.style.animationDelay=(i*35)+'ms';
+    row.dataset.retailer=item.retailer.toLowerCase();
+    const sc=item.status==='LIVE'?'c-status-live':item.status==='ENDED'?'c-status-ended':'c-status-incoming';
+    const ac=item.avail==='ONLINE'?'c-avail-online':'c-avail-store';
+    row.innerHTML=`
+      <div class="db-cell ${sc}">${item.status}</div>
+      <div class="db-cell c-product" data-orig="${item.product}">${item.url?`<a href="${item.url}" target="_blank" class="db-product-link">${item.product}</a>`:item.product}</div>
+      <div class="db-cell c-retailer">${item.retailer}</div>
+      <div class="db-cell c-price">$${item.price.toFixed(2)}</div>
+      <div class="db-cell ${ac}">${item.avail}</div>
+      <div class="db-cell c-time">${timeAgo(item.ts)}</div>
+    `;
+    row.addEventListener('mouseenter',()=>{
+      const pn=row.querySelector('.c-product');
+      const orig=pn.dataset.orig;
+      const anchor=pn.querySelector('a');
+      const target=anchor||pn;
+      let s=0;
+      const iv=setInterval(()=>{
+        if(s>=8){
+          target.textContent=orig;
+          clearInterval(iv);return;
+        }
+        const res=Math.floor(orig.length*(s/8));
+        target.textContent=orig.slice(0,res)+orig.slice(res).split('').map(()=>GLYPHS[Math.floor(Math.random()*GLYPHS.length)]).join('');
+        s++;
+      },35);
+    });
+    el.appendChild(row);
+  });
+  document.getElementById('db-live-count').textContent=live;
+  document.getElementById('db-today-count').textContent=data.length;
+  document.getElementById('db-last-update').textContent='LAST UPDATE: '+new Date().toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+}
+
+function renderDbCal(){
+  const el=document.getElementById('db-cal-content');el.innerHTML='';
+  const groups={};
+  dbCalData.forEach(d=>{if(!groups[d.date])groups[d.date]=[];groups[d.date].push(d);});
+  Object.entries(groups).forEach(([date,items])=>{
+    const g=document.createElement('div');g.className='db-cal-group';
+    g.innerHTML=`<div class="db-cal-day">${date}</div>`;
+    items.forEach((item,i)=>{
+      const d=document.createElement('div');d.className='db-drop';d.style.animationDelay=(i*40)+'ms';
+      d.innerHTML=`
+        <div><div class="db-drop-time">${item.time}</div><div class="db-drop-ampm">${item.ampm}</div></div>
+        <div><div class="db-drop-product">${item.product}</div><div class="db-drop-retailer">${item.retailer}</div></div>
+        <div class="db-drop-price">$${item.price.toFixed(2)}</div>
+        <div class="db-drop-avail ${item.avail}">${item.avail.toUpperCase()}</div>
+      `;
+      g.appendChild(d);
+    });
+    el.appendChild(g);
+  });
+}
+
+// Tab switching
+document.querySelectorAll('.db-tab').forEach(tab=>{
+  tab.addEventListener('click',()=>{
+    document.querySelectorAll('.db-tab').forEach(t=>t.classList.remove('active'));
+    tab.classList.add('active');
+    document.querySelectorAll('.db-pane').forEach(p=>p.classList.remove('active'));
+    document.getElementById('pane-'+tab.dataset.pane).classList.add('active');
+  });
+});
+
+// Filter buttons
+document.querySelectorAll('.db-filter').forEach(btn=>{
+  btn.addEventListener('click',()=>{
+    document.querySelectorAll('.db-filter').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');dbFilter=btn.dataset.f;renderDbFeed();
+  });
+});
+
+// Bell → go to alerts tab
+document.getElementById('db-bell').addEventListener('click',()=>{
+  document.querySelectorAll('.db-tab').forEach(t=>t.classList.remove('active'));
+  document.querySelector('[data-pane="alerts"]').classList.add('active');
+  document.querySelectorAll('.db-pane').forEach(p=>p.classList.remove('active'));
+  document.getElementById('pane-alerts').classList.add('active');
+});
+
+// Toggles + retailer checks
+document.querySelectorAll('.db-toggle').forEach(t=>t.addEventListener('click',()=>t.classList.toggle('on')));
+// ── ADMIN PANEL ──────────────────────────────────────────────
+function initAdminPanel(){
+  document.getElementById('admin-tab').style.display='';
+
+  document.querySelectorAll('.theme-btn').forEach(btn=>{
+    btn.addEventListener('click',()=>applyThemeColor(btn.dataset.color, true));
+  });
+  document.getElementById('apply-custom-color')?.addEventListener('click',()=>{
+    applyThemeColor(document.getElementById('custom-color-picker').value, true);
+  });
+
+  document.getElementById('admin-rescan-btn')?.addEventListener('click',async()=>{
+    const msg=document.getElementById('admin-rescan-msg');
+    msg.textContent='SCANNING...';
+    if(!window._sb){msg.textContent='NOT CONNECTED';return;}
+    try{
+      const {data,error}=await window._sb.from('restocks')
+        .select('discord_msg_id,product_name,retailer,price,trackalacker_url')
+        .order('created_at',{ascending:false}).limit(1).single();
+      if(error||!data){msg.textContent='NO ALERTS FOUND';return;}
+      const slug=data.trackalacker_url?.match(/\/products\/showcase\/([^?&/]+)/)?.[1];
+      if(!slug){msg.textContent='NO SLUG FOUND';return;}
+      const resp=await fetch(`https://efkeafzzcvupjsrinoti.supabase.co/functions/v1/trackalacker-proxy?slug=${slug}`);
+      const json=await resp.json();
+      const listings=json?.product?.listings||[];
+      const retailerUpper=(data.retailer||'').toUpperCase();
+      let directUrl=null;
+      for(const l of listings){
+        const provider=(l.provider?.display_name||'').toUpperCase();
+        const inStock=l.current_status?.online_availability;
+        const price=l.price||0;
+        const url=l.url||'';
+        if(!inStock||!url) continue;
+        if(retailerUpper.includes(provider)||provider.includes(retailerUpper)){
+          if(Math.abs(price-(data.price||0))<0.01){directUrl=url;break;}
+          if(!directUrl) directUrl=url;
+        }
+      }
+      if(directUrl){
+        await window._sb.from('restocks').update({url:directUrl}).eq('discord_msg_id',data.discord_msg_id);
+        msg.textContent='✓ UPDATED → '+directUrl.slice(0,50)+'...';
+        const idx=dbFeedData.findIndex(r=>r.discord_msg_id===data.discord_msg_id);
+        if(idx>-1){dbFeedData[idx].url=directUrl;renderDbFeed();}
+      } else {
+        msg.textContent='NO DIRECT URL FOUND';
+      }
+    }catch(e){msg.textContent='ERROR: '+e.message;}
+    setTimeout(()=>msg.textContent='',5000);
+  });
+
+  document.getElementById('admin-clear-ended-btn')?.addEventListener('click',async()=>{
+    const msg=document.getElementById('admin-delete-msg');
+    if(!confirm('Delete all ENDED drops?')) return;
+    if(!window._sb){msg.textContent='NOT CONNECTED';return;}
+    const {error,count}=await window._sb.from('restocks').delete({count:'exact'}).eq('status','ENDED');
+    msg.textContent=error?'ERROR':'✓ DELETED '+(count||0)+' ROWS';
+    if(!error){dbFeedData=dbFeedData.filter(r=>r.status!=='ENDED');renderDbFeed();}
+    setTimeout(()=>msg.textContent='',3000);
+  });
+
+  document.getElementById('admin-clear-all-btn')?.addEventListener('click',async()=>{
+    const msg=document.getElementById('admin-delete-msg');
+    if(!confirm('DELETE ALL DROPS? Cannot be undone.')) return;
+    if(!window._sb){msg.textContent='NOT CONNECTED';return;}
+    const {error}=await window._sb.from('restocks').delete().neq('id',0);
+    msg.textContent=error?'ERROR':'✓ ALL DROPS DELETED';
+    if(!error){dbFeedData=[];renderDbFeed();}
+    setTimeout(()=>msg.textContent='',3000);
+  });
+}
+
+// ── THEME & POKEBALL ─────────────────────────────────────────
+function hexToRgb(hex){
+  const r=parseInt(hex.slice(1,3),16),g=parseInt(hex.slice(3,5),16),b=parseInt(hex.slice(5,7),16);
+  return {r,g,b};
+}
+function darken(r,g,b,f){return `${Math.round(r*f)},${Math.round(g*f)},${Math.round(b*f)}`;}
+
+// Pokeball skin definitions per color
+function updatePokeballSkin(hex) {
+  try {
+    const BALL_MAP = {
+      '#28a855': 'nest',
+      '#00bfff': 'dive',
+      '#ff6b35': 'fast',
+      '#a855f7': 'master',
+      '#ff4488': 'love',
+      '#fbbf24': 'ultra',
+      '#ff4444': 'poke',
+      '#ffffff': 'premier',
+    };
+    const ball = BALL_MAP[hex] || 'nest';
+    const {r,g,b} = hexToRgb(hex);
+
+    const pbTop    = document.getElementById('pb-top');
+    const pbBot    = document.getElementById('pb-bot');
+    const pbBand   = document.getElementById('pb-band');
+    const pbCenter = document.getElementById('pb-center-wrap');
+    const flyPb    = document.getElementById('flying-pb');
+    if (!pbTop || !pbBot || !pbCenter) return;
+
+    const designs = {
+
+      // ── Poké Ball: classic red top, black bottom ─────────────────────
+      poke: {
+        top: `<svg width="130" height="65" viewBox="0 0 130 65" xmlns="http://www.w3.org/2000/svg">
+          <defs><radialGradient id="topGrad" cx="40%" cy="30%" r="70%">
+            <stop offset="0%" stop-color="#ff6666"/>
+            <stop offset="60%" stop-color="#ee1111"/>
+            <stop offset="100%" stop-color="#990000"/>
+          <\/radialGradient><\/defs>
+          <path d="M5,65 A60,60 0 0,1 125,65 L85,65 A20,20 0 0,0 45,65 L5,65 Z" fill="url(#topGrad)" stroke="#111" stroke-width="2"/>
+          <!-- shine -->
+          <ellipse cx="42" cy="28" rx="14" ry="8" fill="rgba(255,255,255,0.18)" transform="rotate(-30,42,28)"/>
+        <\/svg>`,
+        bot: `<svg width="130" height="65" viewBox="0 0 130 65" xmlns="http://www.w3.org/2000/svg">
+          <defs><radialGradient id="botGrad" cx="50%" cy="60%" r="70%">
+            <stop offset="0%" stop-color="#444"/>
+            <stop offset="100%" stop-color="#111"/>
+          <\/radialGradient><\/defs>
+          <path d="M5,0 A60,60 0 0,0 125,0 L85,0 A20,20 0 0,1 45,0 L5,0 Z" fill="url(#botGrad)" stroke="#111" stroke-width="2"/>
+        <\/svg>`,
+        band: '#333333',
+        btnOuter: '#111', btnMid: '#222', btnInner0: '#ffffff', btnInner1: '#aaaaaa', btnStroke: '#555',
+        fly: '#ee1111',
+      },
+
+      // ── Ultra Ball: black top with gold H/streaks ─────────────────────
+      ultra: {
+        top: `<svg width="130" height="65" viewBox="0 0 130 65" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <radialGradient id="topGrad" cx="40%" cy="30%" r="70%">
+              <stop offset="0%" stop-color="#444"/>
+              <stop offset="60%" stop-color="#1a1a1a"/>
+              <stop offset="100%" stop-color="#000"/>
+            <\/radialGradient>
+            <clipPath id="tc"><path d="M5,65 A60,60 0 0,1 125,65 L85,65 A20,20 0 0,0 45,65 L5,65 Z"/><\/clipPath>
+          <\/defs>
+          <path d="M5,65 A60,60 0 0,1 125,65 L85,65 A20,20 0 0,0 45,65 L5,65 Z" fill="url(#topGrad)" stroke="#111" stroke-width="2"/>
+          <!-- gold streaks -->
+          <g clip-path="url(#tc)">
+            <line x1="38" y1="65" x2="50" y2="0" stroke="#ffd700" stroke-width="4" opacity="0.9"/>
+            <line x1="56" y1="65" x2="65" y2="0" stroke="#ffd700" stroke-width="3" opacity="0.7"/>
+            <line x1="74" y1="65" x2="80" y2="0" stroke="#ffd700" stroke-width="2.5" opacity="0.6"/>
+          <\/g>
+          <ellipse cx="42" cy="28" rx="12" ry="7" fill="rgba(255,255,255,0.1)" transform="rotate(-30,42,28)"/>
+        <\/svg>`,
+        bot: `<svg width="130" height="65" viewBox="0 0 130 65" xmlns="http://www.w3.org/2000/svg">
+          <path d="M5,0 A60,60 0 0,0 125,0 L85,0 A20,20 0 0,1 45,0 L5,0 Z" fill="#111" stroke="#111" stroke-width="2"/>
+        <\/svg>`,
+        band: '#333333',
+        btnOuter: '#111', btnMid: '#1a1a00', btnInner0: '#ffd700', btnInner1: '#996600', btnStroke: '#ffd700',
+        fly: '#ffd700',
+      },
+
+      // ── Master Ball: purple top, white M, pink oval bumps ─────────────
+      master: {
+        top: `<svg width="130" height="65" viewBox="0 0 130 65" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <radialGradient id="topGrad" cx="40%" cy="30%" r="70%">
+              <stop offset="0%" stop-color="#cc77ff"/>
+              <stop offset="50%" stop-color="#8822cc"/>
+              <stop offset="100%" stop-color="#330066"/>
+            <\/radialGradient>
+            <clipPath id="tc2"><path d="M5,65 A60,60 0 0,1 125,65 L85,65 A20,20 0 0,0 45,65 L5,65 Z"/><\/clipPath>
+          <\/defs>
+          <path d="M5,65 A60,60 0 0,1 125,65 L85,65 A20,20 0 0,0 45,65 L5,65 Z" fill="url(#topGrad)" stroke="#111" stroke-width="2"/>
+          <g clip-path="url(#tc2)">
+            <!-- white M -->
+            <text x="65" y="52" text-anchor="middle" font-family="Arial Black,Impact,sans-serif" font-weight="900" font-size="38" fill="white" opacity="0.95">M<\/text>
+          <\/g>
+          <!-- pink oval bumps on sides -->
+          <ellipse cx="18" cy="38" rx="8" ry="13" fill="#ff88cc" opacity="0.95"/>
+          <ellipse cx="112" cy="38" rx="8" ry="13" fill="#ff88cc" opacity="0.95"/>
+          <ellipse cx="42" cy="20" rx="12" ry="7" fill="rgba(255,255,255,0.15)" transform="rotate(-30,42,20)"/>
+        <\/svg>`,
+        bot: `<svg width="130" height="65" viewBox="0 0 130 65" xmlns="http://www.w3.org/2000/svg">
+          <path d="M5,0 A60,60 0 0,0 125,0 L85,0 A20,20 0 0,1 45,0 L5,0 Z" fill="#1a0033" stroke="#111" stroke-width="2"/>
+        <\/svg>`,
+        band: '#333333',
+        btnOuter: '#111', btnMid: '#1a0033', btnInner0: '#cc77ff', btnInner1: '#660099', btnStroke: '#aa44ee',
+        fly: '#aa44ee',
+      },
+
+      // ── Nest Ball: green top with hexagonal web lines ─────────────────
+      nest: {
+        top: `<svg width="130" height="65" viewBox="0 0 130 65" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <radialGradient id="topGrad" cx="40%" cy="30%" r="70%">
+              <stop offset="0%" stop-color="#66dd88"/>
+              <stop offset="50%" stop-color="#22aa44"/>
+              <stop offset="100%" stop-color="#005522"/>
+            <\/radialGradient>
+            <clipPath id="tc3"><path d="M5,65 A60,60 0 0,1 125,65 L85,65 A20,20 0 0,0 45,65 L5,65 Z"/><\/clipPath>
+          <\/defs>
+          <path d="M5,65 A60,60 0 0,1 125,65 L85,65 A20,20 0 0,0 45,65 L5,65 Z" fill="url(#topGrad)" stroke="#111" stroke-width="2"/>
+          <g clip-path="url(#tc3)">
+            <!-- hexagonal web pattern -->
+            <line x1="65" y1="0" x2="65" y2="65" stroke="rgba(255,255,255,0.25)" stroke-width="1.5"/>
+            <line x1="30" y1="0" x2="100" y2="65" stroke="rgba(255,255,255,0.25)" stroke-width="1.5"/>
+            <line x1="100" y1="0" x2="30" y2="65" stroke="rgba(255,255,255,0.25)" stroke-width="1.5"/>
+            <path d="M14,32 Q65,8 116,32" fill="none" stroke="rgba(255,255,255,0.2)" stroke-width="1.5"/>
+            <path d="M20,50 Q65,28 110,50" fill="none" stroke="rgba(255,255,255,0.2)" stroke-width="1.5"/>
+            <path d="M30,14 Q65,0 100,14" fill="none" stroke="rgba(255,255,255,0.15)" stroke-width="1"/>
+          <\/g>
+          <ellipse cx="42" cy="22" rx="12" ry="7" fill="rgba(255,255,255,0.18)" transform="rotate(-30,42,22)"/>
+        <\/svg>`,
+        bot: `<svg width="130" height="65" viewBox="0 0 130 65" xmlns="http://www.w3.org/2000/svg">
+          <defs><radialGradient id="botGrad2" cx="50%" cy="60%" r="70%">
+            <stop offset="0%" stop-color="#224422"/>
+            <stop offset="100%" stop-color="#0a1a0a"/>
+          <\/radialGradient><\/defs>
+          <path d="M5,0 A60,60 0 0,0 125,0 L85,0 A20,20 0 0,1 45,0 L5,0 Z" fill="url(#botGrad2)" stroke="#111" stroke-width="2"/>
+        <\/svg>`,
+        band: '#44cc66',
+        btnOuter: '#0a1a0a', btnMid: '#112211', btnInner0: '#66dd88', btnInner1: '#226633', btnStroke: '#44aa55',
+        fly: '#44cc66',
+      },
+
+      // ── Dive Ball: blue top with wave motif, dot at top ───────────────
+      dive: {
+        top: `<svg width="130" height="65" viewBox="0 0 130 65" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <radialGradient id="topGrad" cx="40%" cy="30%" r="70%">
+              <stop offset="0%" stop-color="#44bbff"/>
+              <stop offset="50%" stop-color="#0077cc"/>
+              <stop offset="100%" stop-color="#002255"/>
+            <\/radialGradient>
+            <clipPath id="tc4"><path d="M5,65 A60,60 0 0,1 125,65 L85,65 A20,20 0 0,0 45,65 L5,65 Z"/><\/clipPath>
+          <\/defs>
+          <path d="M5,65 A60,60 0 0,1 125,65 L85,65 A20,20 0 0,0 45,65 L5,65 Z" fill="url(#topGrad)" stroke="#111" stroke-width="2"/>
+          <g clip-path="url(#tc4)">
+            <!-- wave lines -->
+            <path d="M5,52 Q25,44 45,52 Q65,60 85,52 Q105,44 125,52" fill="none" stroke="rgba(150,220,255,0.5)" stroke-width="2.5"/>
+            <path d="M5,40 Q25,32 45,40 Q65,48 85,40 Q105,32 125,40" fill="none" stroke="rgba(150,220,255,0.4)" stroke-width="2"/>
+            <path d="M5,28 Q25,20 45,28 Q65,36 85,28 Q105,20 125,28" fill="none" stroke="rgba(150,220,255,0.3)" stroke-width="1.5"/>
+            <path d="M20,14 Q42,6 65,14 Q88,22 110,14" fill="none" stroke="rgba(150,220,255,0.2)" stroke-width="1.5"/>
+          <\/g>
+          <!-- small blue dot at top -->
+          <circle cx="65" cy="6" r="4" fill="#aaeeff" opacity="0.9"/>
+          <ellipse cx="42" cy="22" rx="12" ry="7" fill="rgba(255,255,255,0.18)" transform="rotate(-30,42,22)"/>
+        <\/svg>`,
+        bot: `<svg width="130" height="65" viewBox="0 0 130 65" xmlns="http://www.w3.org/2000/svg">
+          <defs><radialGradient id="botGrad3" cx="50%" cy="60%" r="70%">
+            <stop offset="0%" stop-color="#112244"/>
+            <stop offset="100%" stop-color="#030810"/>
+          <\/radialGradient><\/defs>
+          <path d="M5,0 A60,60 0 0,0 125,0 L85,0 A20,20 0 0,1 45,0 L5,0 Z" fill="url(#botGrad3)" stroke="#111" stroke-width="2"/>
+        <\/svg>`,
+        band: '#0099ee',
+        btnOuter: '#030810', btnMid: '#001133', btnInner0: '#44bbff', btnInner1: '#003388', btnStroke: '#0099ee',
+        fly: '#0099ee',
+      },
+
+      // ── Fast Ball: white/gray top with red lightning streaks ──────────
+      fast: {
+        top: `<svg width="130" height="65" viewBox="0 0 130 65" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <radialGradient id="topGrad" cx="40%" cy="30%" r="70%">
+              <stop offset="0%" stop-color="#ffffff"/>
+              <stop offset="50%" stop-color="#dddddd"/>
+              <stop offset="100%" stop-color="#aaaaaa"/>
+            <\/radialGradient>
+            <clipPath id="tc5"><path d="M5,65 A60,60 0 0,1 125,65 L85,65 A20,20 0 0,0 45,65 L5,65 Z"/><\/clipPath>
+          <\/defs>
+          <path d="M5,65 A60,60 0 0,1 125,65 L85,65 A20,20 0 0,0 45,65 L5,65 Z" fill="url(#topGrad)" stroke="#111" stroke-width="2"/>
+          <g clip-path="url(#tc5)">
+            <!-- red streaks on sides -->
+            <path d="M5,30 L28,30 L18,48 L5,48 Z" fill="#dd2222" opacity="0.85"/>
+            <path d="M125,30 L102,30 L112,48 L125,48 Z" fill="#dd2222" opacity="0.85"/>
+          <\/g>
+          <ellipse cx="42" cy="22" rx="14" ry="8" fill="rgba(255,255,255,0.4)" transform="rotate(-30,42,22)"/>
+        <\/svg>`,
+        bot: `<svg width="130" height="65" viewBox="0 0 130 65" xmlns="http://www.w3.org/2000/svg">
+          <defs><radialGradient id="botGrad4" cx="50%" cy="60%" r="70%">
+            <stop offset="0%" stop-color="#555"/>
+            <stop offset="100%" stop-color="#222"/>
+          <\/radialGradient><\/defs>
+          <path d="M5,0 A60,60 0 0,0 125,0 L85,0 A20,20 0 0,1 45,0 L5,0 Z" fill="url(#botGrad4)" stroke="#111" stroke-width="2"/>
+        <\/svg>`,
+        band: '#555555',
+        btnOuter: '#222', btnMid: '#331111', btnInner0: '#ffffff', btnInner1: '#888888', btnStroke: '#555',
+        fly: '#aaaaaa',
+      },
+
+      // ── Love Ball: pink top with white heart up the middle ────────────
+      love: {
+        top: `<svg width="130" height="65" viewBox="0 0 130 65" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <radialGradient id="topGrad" cx="40%" cy="30%" r="70%">
+              <stop offset="0%" stop-color="#ff99cc"/>
+              <stop offset="50%" stop-color="#ff4488"/>
+              <stop offset="100%" stop-color="#990033"/>
+            <\/radialGradient>
+            <clipPath id="tc6"><path d="M5,65 A60,60 0 0,1 125,65 L85,65 A20,20 0 0,0 45,65 L5,65 Z"/><\/clipPath>
+          <\/defs>
+          <path d="M5,65 A60,60 0 0,1 125,65 L85,65 A20,20 0 0,0 45,65 L5,65 Z" fill="url(#topGrad)" stroke="#111" stroke-width="2"/>
+          <g clip-path="url(#tc6)">
+            <!-- white heart going up the middle -->
+            <path d="M65,58 C65,58 50,46 50,36 C50,30 54,26 58,26 C61,26 63,28 65,31 C67,28 69,26 72,26 C76,26 80,30 80,36 C80,46 65,58 65,58 Z" fill="white" opacity="0.95"/>
+            <!-- heart stem going up -->
+            <rect x="62" y="20" width="6" height="10" fill="white" opacity="0.95"/>
+            <path d="M59,16 C59,13 62,11 65,11 C68,11 71,13 71,16 C71,19 68,20 65,20 C62,20 59,19 59,16 Z" fill="white" opacity="0.9"/>
+          <\/g>
+          <ellipse cx="42" cy="22" rx="12" ry="7" fill="rgba(255,255,255,0.2)" transform="rotate(-30,42,22)"/>
+        <\/svg>`,
+        bot: `<svg width="130" height="65" viewBox="0 0 130 65" xmlns="http://www.w3.org/2000/svg">
+          <defs><radialGradient id="botGrad5" cx="50%" cy="60%" r="70%">
+            <stop offset="0%" stop-color="#441122"/>
+            <stop offset="100%" stop-color="#110008"/>
+          <\/radialGradient><\/defs>
+          <path d="M5,0 A60,60 0 0,0 125,0 L85,0 A20,20 0 0,1 45,0 L5,0 Z" fill="url(#botGrad5)" stroke="#111" stroke-width="2"/>
+        <\/svg>`,
+        band: '#ff4488',
+        btnOuter: '#110008', btnMid: '#330011', btnInner0: '#ff99cc', btnInner1: '#cc2266', btnStroke: '#ff4488',
+        fly: '#ff4488',
+      },
+
+      // ── Premier Ball: all white, bright red center line only ──────────
+      premier: {
+        top: `<svg width="130" height="65" viewBox="0 0 130 65" xmlns="http://www.w3.org/2000/svg">
+          <defs><radialGradient id="topGrad" cx="40%" cy="30%" r="70%">
+            <stop offset="0%" stop-color="#ffffff"/>
+            <stop offset="60%" stop-color="#eeeeee"/>
+            <stop offset="100%" stop-color="#cccccc"/>
+          <\/radialGradient><\/defs>
+          <path d="M5,65 A60,60 0 0,1 125,65 L85,65 A20,20 0 0,0 45,65 L5,65 Z" fill="url(#topGrad)" stroke="#aaa" stroke-width="2"/>
+          <ellipse cx="42" cy="22" rx="14" ry="8" fill="rgba(255,255,255,0.6)" transform="rotate(-30,42,22)"/>
+        <\/svg>`,
+        bot: `<svg width="130" height="65" viewBox="0 0 130 65" xmlns="http://www.w3.org/2000/svg">
+          <defs><radialGradient id="botGrad6" cx="50%" cy="60%" r="70%">
+            <stop offset="0%" stop-color="#dddddd"/>
+            <stop offset="100%" stop-color="#aaaaaa"/>
+          <\/radialGradient><\/defs>
+          <path d="M5,0 A60,60 0 0,0 125,0 L85,0 A20,20 0 0,1 45,0 L5,0 Z" fill="url(#botGrad6)" stroke="#aaa" stroke-width="2"/>
+        <\/svg>`,
+        band: '#ee2222',
+        btnOuter: '#aaa', btnMid: '#cccccc', btnInner0: '#ffffff', btnInner1: '#dddddd', btnStroke: '#888',
+        fly: '#cccccc',
+      },
+    };
+
+    const d = designs[ball];
+
+    // Rebuild SVGs
+    pbTop.innerHTML = d.top;
+    pbBot.innerHTML = d.bot;
+
+    // Band — always visible
+    if (pbBand) {
+      pbBand.style.background = d.band;
+      pbBand.style.boxShadow = `0 0 8px rgba(${r},${g},${b},0.5)`;
+    }
+
+    // Center button
+    pbCenter.innerHTML = `<svg width="40" height="40" viewBox="0 0 40 40">
+      <defs>
+        <radialGradient id="btnGrad" cx="38%" cy="32%" r="60%">
+          <stop offset="0%" stop-color="${d.btnInner0}"/>
+          <stop offset="100%" stop-color="${d.btnInner1}"/>
+        <\/radialGradient>
+        <filter id="cg"><feGaussianBlur stdDeviation="2.5" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/><\/feMerge><\/filter>
+      <\/defs>
+      <circle cx="20" cy="20" r="18" fill="${d.btnOuter}" stroke="${d.btnStroke}" stroke-width="1.5" filter="url(#cg)"/>
+      <circle cx="20" cy="20" r="12" fill="${d.btnMid}" stroke="${d.btnStroke}" stroke-width="1" opacity="0.6"/>
+      <circle cx="20" cy="20" r="7" fill="url(#btnGrad)" stroke="${d.btnStroke}" stroke-width="1.2" id="pb-inner-btn" style="cursor:pointer;"/>
+      <circle cx="17" cy="17" r="2.5" fill="rgba(255,255,255,0.35)"/>
+    <\/svg>`;
+
+    // Flying pokeball
+    if (flyPb) {
+      flyPb.querySelectorAll('circle').forEach(c => c.setAttribute('stroke', d.fly));
+      const line = flyPb.querySelector('line');
+      if (line) line.setAttribute('stroke', d.fly);
+    }
+
+    // Radar
+    document.querySelectorAll('.radar-circle').forEach(c => { c.style.borderColor = hex; });
+    const sweep = document.querySelector('.radar-sweep');
+    if (sweep) sweep.style.background = `linear-gradient(90deg, transparent, ${hex})`;
+
+  } catch(e) { /* DOM not ready */ }
+}
+
+function applyThemeColor(hex, save){
+  const {r,g,b} = hexToRgb(hex);
+  const root = document.documentElement;
+
+  // Core vars
+  root.style.setProperty('--sp-bright', hex);
+  root.style.setProperty('--sp-dim', `rgba(${r},${g},${b},0.4)`);
+  root.style.setProperty('--sp-glow', `rgba(${r},${g},${b},0.13)`);
+  root.style.setProperty('--border', `rgba(${r},${g},${b},0.12)`);
+  root.style.setProperty('--sp', `rgb(${darken(r,g,b,0.32)})`);
+  root.style.setProperty('--sp-mid', `rgb(${darken(r,g,b,0.62)})`);
+
+  // Inject dynamic style overrides for all hardcoded rgba glow values
+  let s = document.getElementById('theme-dynamic');
+  if(!s){s=document.createElement('style');s.id='theme-dynamic';document.head.appendChild(s);}
+  s.textContent = `
+    .logo{text-shadow:0 0 16px rgba(${r},${g},${b},0.8),0 0 36px rgba(${r},${g},${b},0.2);}
+    .logo-p:hover{text-shadow:0 0 24px rgba(${r},${g},${b},1),0 0 48px rgba(${r},${g},${b},0.4);}
+    .dot{box-shadow:0 0 7px rgba(${r},${g},${b},0.7);}
+    .hero-title span{text-shadow:0 0 28px rgba(${r},${g},${b},0.55),0 0 60px rgba(${r},${g},${b},0.15);}
+    .btn-primary{text-shadow:0 0 8px rgba(${r},${g},${b},0.5);}
+    .btn-primary::after{background:linear-gradient(90deg,transparent,${hex},transparent);box-shadow:0 0 5px ${hex};}
+    .btn-primary::before{background:radial-gradient(ellipse at 50% 130%,rgba(${r},${g},${b},0.2) 0%,transparent 65%);}
+    .btn-primary:hover{color:${hex};text-shadow:0 0 14px rgba(${r},${g},${b},0.9),0 0 28px rgba(${r},${g},${b},0.3);}
+    .btn-ghost::after{color:${hex};text-shadow:0 0 10px rgba(${r},${g},${b},0.7);}
+    .stat-num{text-shadow:0 0 14px rgba(${r},${g},${b},0.55);}
+    .hero-tag{color:${hex};}
+    .feed-row::after{background:${hex};box-shadow:0 0 8px rgba(${r},${g},${b},0.7);}
+    .pb-band-overlay{background:${hex};box-shadow:0 0 6px rgba(${r},${g},${b},0.6);}
+    .pb-label-text{color:${hex};text-shadow:0 0 8px rgba(${r},${g},${b},0.6);}
+    .pb-arrow-line{background:linear-gradient(90deg,transparent,${hex});}
+    .pb-arrow-tip{border-left-color:${hex};}
+    .radar-sweep{background:linear-gradient(90deg,transparent,${hex});}
+    .radar-circle{border-color:${hex};}
+    .signin-close{color:${hex};border-color:rgba(${r},${g},${b},0.4);text-shadow:0 0 8px rgba(${r},${g},${b},0.5);}
+    .signin-logo{color:${hex};text-shadow:0 0 16px rgba(${r},${g},${b},0.8);}
+    .signin-submit{color:${hex};text-shadow:0 0 8px rgba(${r},${g},${b},0.5);}
+    .signin-submit:hover{text-shadow:0 0 14px rgba(${r},${g},${b},0.9),0 0 28px rgba(${r},${g},${b},0.3);}
+    .signin-tab.active{color:${hex};border-bottom-color:${hex};}
+    .admin-title{color:${hex};text-shadow:0 0 12px rgba(${r},${g},${b},0.4);}
+    .admin-box{border-color:rgba(${r},${g},${b},0.2);}
+    .admin-enter{color:${hex};text-shadow:0 0 8px rgba(${r},${g},${b},0.5);}
+    .admin-enter::after{background:linear-gradient(90deg,transparent,${hex},transparent);}
+    .admin-close-btn:hover{color:${hex};}
+    .db-logo{color:${hex};text-shadow:0 0 16px rgba(${r},${g},${b},0.6);}
+    .db-tab::after{background:${hex};}
+    .db-tab.active{color:${hex};}
+    .db-stat-num{color:${hex};text-shadow:0 0 10px rgba(${r},${g},${b},0.4);}
+    .db-username{color:${hex};text-shadow:0 0 8px rgba(${r},${g},${b},0.3);}
+    .db-filter.active{color:${hex};}
+    .db-filter::after{background:${hex};}
+    .db-product-link{color:${hex}!important;}
+    .db-cell.c-retailer{color:${hex};}
+    .db-cell.c-avail-online{color:${hex};}
+    .db-drop::after{background:${hex};box-shadow:0 0 8px rgba(${r},${g},${b},0.5);}
+    .db-drop-time{color:${hex};text-shadow:0 0 8px rgba(${r},${g},${b},0.3);}
+    .db-drop-retailer{color:${hex};}
+    .db-drop-avail.online{color:${hex};}
+    .section-tag{color:${hex};}
+    .section-tag::before{background:${hex};}
+    .feature::before{background:${hex};}
+    .feat-num{color:${hex};}
+    .db-sdot{background:${hex}!important;box-shadow:0 0 4px ${hex}!important;}
+    .ticker-item .up{color:${hex};}
+    .nav-link:hover .char{color:${hex};text-shadow:0 0 10px rgba(${r},${g},${b},0.9);}
+    .db-exit-btn:hover{color:${hex};}
+    .db-bell:hover svg{stroke:${hex};}
+  `;
+
+  if(save && window._sb){
+    window._sb.from('settings').upsert({key:'theme_color',value:hex}).then(()=>{});
+  }
+
+  // Update pokeball skin
+  updatePokeballSkin(hex);
+}
+
+async function loadGlobalTheme(){
+  if(!window._sb) return;
+  const {data} = await window._sb.from('settings').select('value').eq('key','theme_color').single();
+  if(data?.value){ applyThemeColor(data.value, false); updatePokeballSkin(data.value); }
+}
+
+// Retailer checks
+document.querySelectorAll('.db-retailer-row').forEach(r=>r.addEventListener('click',()=>r.classList.toggle('checked')));
+
+// Save alert settings to Supabase
+document.getElementById('save-alerts-btn')?.addEventListener('click',async()=>{
+  const phone=document.getElementById('alert-phone').value.replace(/\D/g,'');
+  const carrier=document.getElementById('alert-carrier').value;
+  const retailers=[...document.querySelectorAll('.db-retailer-row.checked')].map(r=>r.dataset.retailer);
+  const active=document.getElementById('sms-toggle').classList.contains('on');
+  const msg=document.getElementById('alerts-save-msg');
+  if(!phone||phone.length!==10){msg.textContent='ENTER VALID 10-DIGIT NUMBER';setTimeout(()=>msg.textContent='',2500);return;}
+  if(!carrier){msg.textContent='SELECT A CARRIER';setTimeout(()=>msg.textContent='',2500);return;}
+  if(!window._sb){msg.textContent='NOT LOGGED IN';return;}
+  const user=(await window._sb.auth.getUser()).data?.user;
+  if(!user){msg.textContent='SIGN IN TO SAVE ALERTS';return;}
+  try{
+    await window._sb.from('alert_subscriptions').upsert({user_id:user.id,phone_number:phone,carrier,retailers,active},{onConflict:'user_id'});
+    msg.textContent='SAVED ✓';setTimeout(()=>msg.textContent='',2500);
+  }catch(e){msg.textContent='SAVE FAILED';setTimeout(()=>msg.textContent='',2500);}
+});
+
+// Load existing prefs
+async function loadAlertPrefs(){
+  if(!window._sb)return;
+  const user=(await window._sb.auth.getUser()).data?.user;
+  if(!user)return;
+  try{
+    const{data}=await window._sb.from('alert_subscriptions').select('*').eq('user_id',user.id).single();
+    if(!data)return;
+    if(data.phone_number)document.getElementById('alert-phone').value=data.phone_number;
+    if(data.carrier)document.getElementById('alert-carrier').value=data.carrier;
+    if(data.active===false)document.getElementById('sms-toggle').classList.remove('on');
+    if(data.retailers){
+      document.querySelectorAll('.db-retailer-row').forEach(r=>{
+        r.classList.toggle('checked',data.retailers.includes(r.dataset.retailer));
+      });
+    }
+  }catch(e){}
+}
+
+// Exit
+document.getElementById('db-exit-btn').addEventListener('click',()=>{
+  document.getElementById('dashboard').classList.remove('open');
+  document.getElementById('landing').style.display='';
+});
+document.getElementById('db-logo').addEventListener('click',()=>{
+  document.getElementById('dashboard').classList.remove('open');
+  document.getElementById('landing').style.display='';
+});
+
+function openDashboard(username){
+  document.getElementById('landing').style.display='none';
+  document.getElementById('dashboard').classList.add('open');
+  document.getElementById('db-username').textContent=(username||'TRAINER').toUpperCase();
+  renderDbFeed();
+  renderDbCal();
+  loadAlertPrefs();
+  loadGlobalTheme();
+  // Load real data then subscribe to realtime
+  loadRealFeed().then(()=>subscribeRealtime());
+  // Simulate new rows only if no real data after 5s
+  setTimeout(()=>{
+    if(dbFeedData===sampleFeedData||dbFeedData.length===sampleFeedData.length){
+      const newRows=[
+        {status:'LIVE',product:'Temporal Forces Booster Bundle',retailer:'TARGET',price:34.99,avail:'ONLINE',ts:new Date()},
+        {status:'LIVE',product:'Obsidian Flames ETB',retailer:'WALMART',price:44.99,avail:'IN-STORE',ts:new Date()},
+      ];
+      let nr=0;
+      const sim=setInterval(()=>{
+        if(nr>=newRows.length){clearInterval(sim);return;}
+        dbFeedData.unshift({...newRows[nr++],ts:new Date()});
+        if(dbFeedData.length>20)dbFeedData.pop();
+        renderDbFeed();
+      },12000);
+    }
+  },5000);
+  setInterval(()=>renderDbFeed(),60000);
+}
+
+// ── SUPABASE AUTH ──
+function initAuth(){
+  try{
+    const sb=window.supabase.createClient(
+      'https://efkeafzzcvupjsrinoti.supabase.co',
+      'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVma2VhZnp6Y3Z1cGpzcmlub3RpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYwMTk4MzcsImV4cCI6MjA5MTU5NTgzN30.3wpjIrVtcWQDXbFhox_86cuhNak7tx-KH34unsCU-DM'
+    );
+    window._sb=sb;
+
+    // Handle auth state — covers both existing sessions and OAuth returns
+    sb.auth.onAuthStateChange((ev,session)=>{
+      if(ev==='SIGNED_IN'&&session){
+        onSignedIn(session.user);
+      }
+      if(ev==='SIGNED_OUT'){
+        onSignedOut();
+      }
+    });
+
+    // Also check immediately (handles page refresh while logged in)
+    sb.auth.getSession().then(({data:{session}})=>{
+      if(session) onSignedIn(session.user);
+    });
+
+    document.getElementById('btn-google')?.addEventListener('click',()=>{
+      sb.auth.signInWithOAuth({
+        provider:'google',
+        options:{redirectTo:window.location.origin+window.location.pathname}
+      });
+    });
+    document.getElementById('btn-apple')?.addEventListener('click',()=>{
+      sb.auth.signInWithOAuth({
+        provider:'apple',
+        options:{redirectTo:window.location.origin+window.location.pathname}
+      });
+    });
+    document.getElementById('signin-submit')?.addEventListener('click',async()=>{
+      const inputs=[...document.querySelectorAll('#signin-fields .signin-input')];
+      const isUp=document.getElementById('tab-up').classList.contains('active');
+      const btn=document.getElementById('signin-submit');btn.textContent='LOADING...';
+      let res;
+      if(isUp){const[u,e,p]=inputs.map(i=>i.value.trim());res=await sb.auth.signUp({email:e,password:p,options:{data:{full_name:u}}});}
+      else{const[e,p]=inputs.map(i=>i.value.trim());res=await sb.auth.signInWithPassword({email:e,password:p});}
+      if(res.error){btn.textContent=res.error.message.toUpperCase();setTimeout(()=>{btn.textContent=isUp?'CREATE ACCOUNT':'ENTER SYSTEM';},3000);}
+      else{btn.textContent=isUp?'CREATE ACCOUNT':'ENTER SYSTEM';}
+    });
+  }catch(e){console.warn('Auth:',e);}
+}
+function onSignedIn(user){window._currentUser=user;
+  document.getElementById('signin-overlay').classList.remove('open');
+  const name=user.user_metadata?.full_name||user.user_metadata?.name||user.email?.split('@')[0]||'TRAINER';
+  const avatar=user.user_metadata?.avatar_url;
+  document.getElementById('user-badge')?.remove();
+  const badge=document.createElement('div');badge.id='user-badge';badge.style.cssText='display:flex;align-items:center;gap:10px;';
+  badge.innerHTML=`${avatar?`<img src="${avatar}" style="width:22px;height:22px;border-radius:50%;border:1px solid rgba(40,168,85,.4);object-fit:cover;">`:''}
+    <span style="font-family:Share Tech Mono,monospace;font-size:10px;letter-spacing:.2em;color:var(--sp-bright);text-shadow:0 0 8px rgba(40,168,85,.5);">${name.toUpperCase()}</span>
+    <span id="signout-btn" style="font-family:Share Tech Mono,monospace;font-size:9px;letter-spacing:.15em;color:var(--text-dim);cursor:pointer;">[EXIT]</span>`;
+  document.querySelector('.nav-right').appendChild(badge);
+  document.getElementById('signout-btn').addEventListener('click',()=>window._sb?.auth.signOut());
+  const lbl=document.querySelector('.pb-label-text');if(lbl)lbl.textContent=name.toUpperCase();
+  openDashboard(name);
+}
+function onSignedOut(){window._currentUser=null;
+  document.getElementById('user-badge')?.remove();
+  const lbl=document.querySelector('.pb-label-text');if(lbl)lbl.textContent='SIGN IN HERE';
+  document.getElementById('dashboard').classList.remove('open');
+  document.getElementById('landing').style.display='';
+}
+const _s=document.createElement('script');
+_s.src='https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js';
+_s.onload=initAuth;
+// Load immediately so OAuth redirects don't miss the session
+document.head.appendChild(_s);
+
+// If returning from OAuth redirect, show loading state
+if(window.location.hash.includes('access_token') || window.location.search.includes('code=')){
+  document.getElementById('signin-overlay').classList.add('open');
+  document.getElementById('signin-submit').textContent='SIGNING IN...';
+}
+
+</script>
+</body>
+</html>
