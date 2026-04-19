@@ -364,42 +364,6 @@ nav{position:fixed;top:0;left:0;right:0;display:flex;align-items:center;justify-
 .db-status-item{font-family:'Share Tech Mono',monospace;font-size:8px;letter-spacing:.14em;color:var(--text-dim);display:flex;align-items:center;gap:5px;}
 .db-sdot{width:4px;height:4px;border-radius:50%;background:var(--sp-bright);animation:dotP 2.5s ease-in-out infinite;}
 .db-sdot.r{background:var(--red);}
-
-/* ── FEATURED ALERT CARD ── */
-.featured-alert{
-  border:1px solid var(--sp-bright);
-  box-shadow:0 0 18px rgba(40,168,85,.25),0 0 40px rgba(40,168,85,.08);
-  padding:20px 24px;
-  margin-bottom:36px;
-  display:grid;
-  grid-template-columns:80px 1fr auto;
-  gap:20px;
-  align-items:center;
-  cursor:crosshair;
-  text-decoration:none;
-  transition:box-shadow .3s;
-  position:relative;
-  overflow:hidden;
-  animation:featurePulse 3s ease-in-out infinite;
-}
-@keyframes featurePulse{
-  0%,100%{box-shadow:0 0 18px rgba(40,168,85,.25),0 0 40px rgba(40,168,85,.08);}
-  50%{box-shadow:0 0 28px rgba(40,168,85,.45),0 0 60px rgba(40,168,85,.15);}
-}
-.featured-alert:hover{box-shadow:0 0 36px rgba(40,168,85,.5),0 0 70px rgba(40,168,85,.2);}
-.featured-alert-img{width:80px;height:80px;object-fit:cover;border-radius:2px;background:rgba(40,168,85,.06);display:flex;align-items:center;justify-content:center;}
-.featured-alert-img-placeholder{width:80px;height:80px;background:rgba(40,168,85,.08);border:1px solid rgba(40,168,85,.15);display:flex;align-items:center;justify-content:center;font-family:'Share Tech Mono',monospace;font-size:8px;color:var(--text-dim);letter-spacing:.2em;}
-.featured-alert-info{}
-.featured-alert-label{font-family:'Share Tech Mono',monospace;font-size:7px;letter-spacing:.4em;color:var(--sp-bright);margin-bottom:6px;opacity:.7;}
-.featured-alert-name{font-family:'IBM Plex Mono',monospace;font-size:13px;color:var(--text-hi);margin-bottom:6px;line-height:1.3;}
-.featured-alert-meta{display:flex;gap:14px;align-items:center;}
-.featured-alert-retailer{font-family:'Share Tech Mono',monospace;font-size:9px;letter-spacing:.2em;color:var(--sp-bright);}
-.featured-alert-price{font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--text);}
-.featured-alert-avail{font-family:'Share Tech Mono',monospace;font-size:8px;letter-spacing:.15em;color:var(--sp-bright);opacity:.7;}
-.featured-alert-time{font-family:'Share Tech Mono',monospace;font-size:9px;letter-spacing:.15em;color:var(--text-dim);}
-.featured-alert-cta{font-family:'Share Tech Mono',monospace;font-size:9px;letter-spacing:.25em;color:var(--sp-bright);text-align:right;white-space:nowrap;}
-.featured-alert-cta::after{content:'→';margin-left:6px;}
-.featured-alert-none{font-family:'Share Tech Mono',monospace;font-size:9px;letter-spacing:.2em;color:var(--text-dim);padding:20px 0;opacity:.5;}
 </style>
 </head>
 <body>
@@ -533,11 +497,6 @@ nav{position:fixed;top:0;left:0;right:0;display:flex;align-items:center;justify-
       <div class="db-pane-header">
         <span class="db-pane-label">ALERT PREFERENCES</span>
       </div>
-      <!-- FEATURED LATEST ALERT -->
-      <div id="featured-alert-wrap" style="margin-bottom:8px;">
-        <div style="font-family:'Share Tech Mono',monospace;font-size:8px;letter-spacing:.3em;color:var(--text-dim);margin-bottom:12px;">LATEST DROP</div>
-        <div id="featured-alert-card" class="featured-alert-none">NO ACTIVE DROPS</div>
-      </div>
       <div class="db-alerts-wrap">
         <div class="db-alerts-section">
           <div class="db-alerts-stitle">TEXT NOTIFICATIONS</div>
@@ -547,8 +506,20 @@ nav{position:fixed;top:0;left:0;right:0;display:flex;align-items:center;justify-
               <div style="font-family:'Share Tech Mono',monospace;font-size:8px;letter-spacing:.2em;color:var(--text-dim);margin-bottom:8px;">PHONE NUMBER</div>
               <input id="alert-phone" type="tel" placeholder="10-digit number" style="width:100%;background:transparent;border:none;border-bottom:1px solid rgba(40,168,85,.2);outline:none;padding:10px 0;font-family:'Share Tech Mono',monospace;font-size:12px;color:var(--text-hi);transition:border-color .2s;" />
             </div>
-            <input type="hidden" id="alert-carrier" value="auto"/>
-            <div style="font-family:'Share Tech Mono',monospace;font-size:8px;letter-spacing:.2em;color:var(--text-dim);margin-bottom:20px;margin-top:4px;opacity:0.6;">CARRIER AUTO-DETECTED</div>
+            <div style="margin-bottom:20px;">
+              <div style="font-family:'Share Tech Mono',monospace;font-size:8px;letter-spacing:.2em;color:var(--text-dim);margin-bottom:8px;">CARRIER</div>
+              <select id="alert-carrier" style="width:100%;background:#030804;border:none;border-bottom:1px solid rgba(40,168,85,.2);outline:none;padding:10px 0;font-family:'Share Tech Mono',monospace;font-size:11px;color:var(--text-hi);cursor:crosshair;">
+                <option value="">SELECT CARRIER</option>
+                <option value="att">AT&T</option>
+                <option value="verizon">VERIZON</option>
+                <option value="tmobile">T-MOBILE</option>
+                <option value="sprint">SPRINT</option>
+                <option value="boost">BOOST MOBILE</option>
+                <option value="cricket">CRICKET</option>
+                <option value="metro">METRO PCS</option>
+                <option value="uscellular">US CELLULAR</option>
+              </select>
+            </div>
           </div>
         </div>
         <div class="db-alerts-section">
@@ -826,7 +797,7 @@ function launchPokeball(fromEl){
     }
   })(performance.now());
 }
-['nav-calendar','nav-alerts','nav-scanning'].forEach(id=>{const el=document.getElementById(id);if(!el)return;el.addEventListener('mouseenter',e=>{launchPokeball(e.currentTarget);});el.addEventListener('click',e=>{e.preventDefault();if(window._currentUser){const n=window._currentUser.user_metadata?.full_name||window._currentUser.user_metadata?.name||window._currentUser.email?.split('@')[0]||'TRAINER';openDashboard(n);}});});
+['nav-calendar','nav-alerts','nav-scanning'].forEach(id=>document.getElementById(id)?.addEventListener('mouseenter',e=>launchPokeball(e.currentTarget)));
 
 // ── POKEBALL SPIN ──
 const pbContainer=document.getElementById('pokeball-container');
@@ -856,7 +827,7 @@ pbContainer.addEventListener('mouseleave',()=>{
   glowA=pbGlowRing.animate([{width:'70px',height:'70px'},{width:'0px',height:'0px'}],{duration:400,easing:'ease-out',fill:'forwards'});
   pbInnerBtn.style.fill='#080808';pbInnerBtn.style.stroke='#1d6b35';
 });
-pbContainer.addEventListener('click',()=>{
+pbInnerBtn.addEventListener('click',()=>{
   const o=document.getElementById('signin-overlay');
   o.classList.add('open');
   if(!o._grid){o._grid=true;makeGrid(document.getElementById('signin-canvas'));}
@@ -952,7 +923,7 @@ function subscribeRealtime(){
         discord_msg_id:r.discord_msg_id
       });
       if(dbFeedData.length>50)dbFeedData.pop();
-      renderDbFeed();renderFeaturedAlert();
+      renderDbFeed();renderFeaturedCard();
       // Flash status bar
       const sb=document.querySelector('.db-statusbar');
       if(sb){sb.style.borderTopColor='rgba(40,168,85,.4)';setTimeout(()=>{sb.style.borderTopColor='';},600);}
@@ -1545,14 +1516,14 @@ async function loadGlobalTheme(){
 document.querySelectorAll('.db-retailer-row').forEach(r=>r.addEventListener('click',()=>r.classList.toggle('checked')));
 
 // Save alert settings to Supabase
-document.getElementById('save-alerts-btn')?.addEventListener('click',async()=>{
+document.getElementById('sms-signup-btn')?.addEventListener('click',async()=>{
   const phone=document.getElementById('alert-phone').value.replace(/\D/g,'');
   const carrier=document.getElementById('alert-carrier').value;
   const retailers=[...document.querySelectorAll('.db-retailer-row.checked')].map(r=>r.dataset.retailer);
   const active=document.getElementById('sms-toggle').classList.contains('on');
   const msg=document.getElementById('alerts-save-msg');
   if(!phone||phone.length!==10){msg.textContent='ENTER VALID 10-DIGIT NUMBER';setTimeout(()=>msg.textContent='',2500);return;}
-  // carrier auto-detected
+  if(!carrier){msg.textContent='SELECT A CARRIER';setTimeout(()=>msg.textContent='',2500);return;}
   if(!window._sb){msg.textContent='NOT LOGGED IN';return;}
   const user=(await window._sb.auth.getUser()).data?.user;
   if(!user){msg.textContent='SIGN IN TO SAVE ALERTS';return;}
@@ -1592,32 +1563,34 @@ document.getElementById('db-logo').addEventListener('click',()=>{
 });
 
 
-function renderFeaturedAlert(){
-  const el=document.getElementById('featured-alert-card');
+function renderFeaturedCard(){
+  const el=document.getElementById('featured-card');
   if(!el)return;
-  const live=dbFeedData.filter(r=>r.status==='LIVE');
-  const item=live[0]||dbFeedData[0];
-  if(!item){el.className='featured-alert-none';el.textContent='NO ACTIVE DROPS';return;}
-  const msrpMap={'TARGET':49.99,'WALMART':49.99,'COSTCO':44.99,"SAM'S CLUB":44.99,'AMAZON':49.99};
+  // Show most recent drop regardless of status
+  const item=dbFeedData[0];
+  if(!item){el.style.opacity='.4';el.textContent='AWAITING DROPS...';return;}
+  const msrpMap={TARGET:49.99,WALMART:49.99,COSTCO:44.99,"SAM'S CLUB":44.99,AMAZON:49.99,GAMESTOP:54.99};
   const msrp=msrpMap[item.retailer]||49.99;
-  const aboveMsrp=item.price>msrp;
-  const priceNote=aboveMsrp?` <span style="font-size:8px;color:#ff8844;letter-spacing:.1em;">(ABOVE MSRP)</span>`:` <span style="font-size:8px;color:var(--sp-bright);letter-spacing:.1em;">(MSRP)</span>`;
-  el.className='featured-alert';
-  el.style.borderColor='var(--sp-bright)';
+  const aboveMsrp=item.price>msrp+0.5;
+  const belowMsrp=item.price<msrp-0.5;
+  const msrpLabel=aboveMsrp?`<span class="fc-msrp" style="color:#ff8844;">(ABOVE MSRP)</span>`:belowMsrp?`<span class="fc-msrp" style="color:var(--sp-bright);">(BELOW MSRP ✓)</span>`:`<span class="fc-msrp" style="color:var(--text-dim);">(AT MSRP)</span>`;
+  el.className='featured-card';
+  el.style.opacity='1';
   el.onclick=()=>{if(item.url)window.open(item.url,'_blank');};
   el.innerHTML=`
-    <div class="featured-alert-img-placeholder">📦</div>
-    <div class="featured-alert-info">
-      <div class="featured-alert-label">● LATEST RESTOCK</div>
-      <div class="featured-alert-name">${item.product}</div>
-      <div class="featured-alert-meta">
-        <span class="featured-alert-retailer">${item.retailer}</span>
-        <span class="featured-alert-price">$${item.price.toFixed(2)}${priceNote}</span>
-        <span class="featured-alert-avail">${item.avail}</span>
-        <span class="featured-alert-time">${timeAgo(item.ts)}</span>
+    <div class="fc-img">📦</div>
+    <div class="fc-info">
+      <div class="fc-tag">${item.status==='LIVE'?'● IN STOCK':'◌ LAST DROP'}</div>
+      <div class="fc-name">${item.product}</div>
+      <div class="fc-meta">
+        <span class="fc-retailer">${item.retailer}</span>
+        <span class="fc-price">$${item.price.toFixed(2)}</span>
+        ${msrpLabel}
+        <span class="fc-avail">${item.avail}</span>
+        <span class="fc-time">${timeAgo(item.ts)}</span>
       </div>
     </div>
-    <div class="featured-alert-cta">SHOP NOW</div>
+    <div class="fc-cta">SHOP NOW</div>
   `;
 }
 
@@ -1698,23 +1671,21 @@ function initAuth(){
     });
   }catch(e){console.warn('Auth:',e);}
 }
-function onSignedIn(user){window._currentUser=user;
+function onSignedIn(user){
   document.getElementById('signin-overlay').classList.remove('open');
   const name=user.user_metadata?.full_name||user.user_metadata?.name||user.email?.split('@')[0]||'TRAINER';
   const avatar=user.user_metadata?.avatar_url;
   document.getElementById('user-badge')?.remove();
   const badge=document.createElement('div');badge.id='user-badge';badge.style.cssText='display:flex;align-items:center;gap:10px;';
   badge.innerHTML=`${avatar?`<img src="${avatar}" style="width:22px;height:22px;border-radius:50%;border:1px solid rgba(40,168,85,.4);object-fit:cover;">`:''}
-    <span style="font-family:Share Tech Mono,monospace;font-size:9px;letter-spacing:.18em;color:var(--sp-bright);opacity:0.7;">SIGNED IN</span>
     <span style="font-family:Share Tech Mono,monospace;font-size:10px;letter-spacing:.2em;color:var(--sp-bright);text-shadow:0 0 8px rgba(40,168,85,.5);">${name.toUpperCase()}</span>
     <span id="signout-btn" style="font-family:Share Tech Mono,monospace;font-size:9px;letter-spacing:.15em;color:var(--text-dim);cursor:pointer;">[EXIT]</span>`;
   document.querySelector('.nav-right').appendChild(badge);
   document.getElementById('signout-btn').addEventListener('click',()=>window._sb?.auth.signOut());
   const lbl=document.querySelector('.pb-label-text');if(lbl)lbl.textContent=name.toUpperCase();
   openDashboard(name);
-  if(user.email==='ahmupatel2@gmail.com'){initAdminPanel();}
 }
-function onSignedOut(){window._currentUser=null;
+function onSignedOut(){
   document.getElementById('user-badge')?.remove();
   const lbl=document.querySelector('.pb-label-text');if(lbl)lbl.textContent='SIGN IN HERE';
   document.getElementById('dashboard').classList.remove('open');
@@ -1723,7 +1694,6 @@ function onSignedOut(){window._currentUser=null;
 const _s=document.createElement('script');
 _s.src='https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js';
 _s.onload=initAuth;
-fetch('https://efkeafzzcvupjsrinoti.supabase.co/rest/v1/settings?key=eq.theme_color&select=value',{headers:{'apikey':'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVma2VhZnp6Y3Z1cGpzcmlub3RpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYwMTk4MzcsImV4cCI6MjA5MTU5NTgzN30.3wpjIrVtcWQDXbFhox_86cuhNak7tx-KH34unsCU-DM'}}).then(r=>r.json()).then(d=>{if(d[0]?.value)applyThemeColor(d[0].value,false);}).catch(()=>{});
 // Load immediately so OAuth redirects don't miss the session
 document.head.appendChild(_s);
 
