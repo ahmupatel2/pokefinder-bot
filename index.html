@@ -366,9 +366,39 @@ nav{position:fixed;top:0;left:0;right:0;display:flex;align-items:center;justify-
 .db-sdot.r{background:var(--red);}
 
 /* ── FEATURED CARD (LIVE tab) ── */
-.feat-card{border:1px solid var(--sp-bright);box-shadow:0 0 20px rgba(40,168,85,.2);padding:20px 24px;margin-bottom:32px;display:grid;grid-template-columns:1fr auto;gap:16px;align-items:center;cursor:crosshair;transition:box-shadow .3s;animation:featPulse 3s ease-in-out infinite;}
-@keyframes featPulse{0%,100%{box-shadow:0 0 20px rgba(40,168,85,.2);}50%{box-shadow:0 0 40px rgba(40,168,85,.45);}}
-.feat-card:hover{box-shadow:0 0 50px rgba(40,168,85,.6);}
+.feat-card{
+  border:1px solid var(--sp-bright);
+  box-shadow:0 0 22px rgba(var(--feat-rgb,40,168,85),.22);
+  padding:20px 24px;margin-bottom:32px;
+  display:grid;grid-template-columns:72px 1fr auto;gap:20px;align-items:center;
+  cursor:crosshair;border-radius:12px;
+  transition:transform .32s cubic-bezier(.23,1,.32,1),box-shadow .32s ease;
+  animation:featPulse 3s ease-in-out infinite;
+  position:relative;overflow:hidden;
+}
+@keyframes featPulse{
+  0%,100%{box-shadow:0 0 22px rgba(var(--feat-rgb,40,168,85),.22);}
+  50%{box-shadow:0 0 44px rgba(var(--feat-rgb,40,168,85),.5);}
+}
+.feat-card::before{
+  content:'';position:absolute;inset:0;border-radius:12px;
+  background:linear-gradient(135deg,rgba(var(--feat-rgb,40,168,85),.06) 0%,transparent 60%);
+  opacity:0;transition:opacity .32s ease;pointer-events:none;
+}
+.feat-card:hover{transform:translateY(-4px) scale(1.01);box-shadow:0 8px 48px rgba(var(--feat-rgb,40,168,85),.55);}
+.feat-card:hover::before{opacity:1;}
+.feat-card:hover .feat-img-wrap{transform:scale(1.08);}
+.feat-card:hover .feat-cta{letter-spacing:.4em;}
+.feat-img-wrap{
+  width:72px;height:72px;border-radius:50%;
+  border:2px solid var(--sp-bright);
+  overflow:hidden;display:flex;align-items:center;justify-content:center;
+  background:rgba(40,168,85,.08);flex-shrink:0;
+  transition:transform .32s cubic-bezier(.23,1,.32,1);
+  box-shadow:0 0 12px rgba(var(--feat-rgb,40,168,85),.3);
+}
+.feat-img-wrap img{width:100%;height:100%;object-fit:cover;}
+.feat-img-placeholder{font-size:28px;line-height:1;}
 .feat-tag{font-family:'Share Tech Mono',monospace;font-size:7px;letter-spacing:.4em;color:var(--sp-bright);opacity:.7;margin-bottom:6px;display:flex;align-items:center;gap:6px;}
 .feat-tag::before{content:'';width:5px;height:5px;border-radius:50%;background:var(--red);animation:dotP 1.5s ease-in-out infinite;flex-shrink:0;}
 .feat-name{font-family:'IBM Plex Mono',monospace;font-size:14px;color:var(--text-hi);margin-bottom:8px;line-height:1.3;}
@@ -379,7 +409,7 @@ nav{position:fixed;top:0;left:0;right:0;display:flex;align-items:center;justify-
 .feat-msrp-below{font-size:8px;color:var(--sp-bright);letter-spacing:.1em;margin-left:4px;}
 .feat-avail{font-family:'Share Tech Mono',monospace;font-size:8px;letter-spacing:.15em;color:var(--sp-bright);opacity:.7;}
 .feat-time{font-family:'Share Tech Mono',monospace;font-size:9px;color:var(--text-dim);}
-.feat-cta{font-family:'Share Tech Mono',monospace;font-size:11px;letter-spacing:.25em;color:var(--sp-bright);white-space:nowrap;text-align:right;}
+.feat-cta{font-family:'Share Tech Mono',monospace;font-size:11px;letter-spacing:.25em;color:var(--sp-bright);white-space:nowrap;text-align:right;transition:letter-spacing .32s ease;}
 .feat-cta::after{content:' →';}
 
 /* ── ALERTS PANE — wider, more spacious ── */
@@ -1514,6 +1544,7 @@ function applyThemeColor(hex, save){
 
   // Core vars
   root.style.setProperty('--sp-bright', hex);
+  root.style.setProperty('--feat-rgb', `${r},${g},${b}`);
   root.style.setProperty('--sp-dim', `rgba(${r},${g},${b},0.4)`);
   root.style.setProperty('--sp-glow', `rgba(${r},${g},${b},0.13)`);
   root.style.setProperty('--border', `rgba(${r},${g},${b},0.12)`);
@@ -1686,7 +1717,11 @@ function _doRenderFeatCard(el,item){
   const msrp=msrpRef[item.retailer]||49.99;
   const diff=item.price-msrp;
   const msrpTag=diff>1?`<span class="feat-msrp-above">+$${diff.toFixed(2)} ABOVE MSRP</span>`:diff<-1?`<span class="feat-msrp-below">BELOW MSRP ✓</span>`:`<span class="feat-msrp-below">AT MSRP</span>`;
+  // Try to get product image from Google Images (just use a placeholder emoji per retailer)
+  const retailerEmoji={'TARGET':'🎯','WALMART':'🛒','COSTCO':'🏪',"SAM'S CLUB":'🏬','AMAZON':'📦','GAMESTOP':'🎮','BEST BUY':'💻'};
+  const emoji=retailerEmoji[item.retailer]||'📦';
   el.innerHTML=`<div class="feat-card" onclick="${item.url?`window.open('${item.url}','_blank')`:''}">
+    <div class="feat-img-wrap"><div class="feat-img-placeholder">${emoji}</div></div>
     <div>
       <div class="feat-tag">LATEST DROP</div>
       <div class="feat-name">${item.product}</div>
