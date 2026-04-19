@@ -612,7 +612,7 @@ nav{position:fixed;top:0;left:0;right:0;display:flex;align-items:center;justify-
           <div style="margin-top:20px;">
             <div style="margin-bottom:16px;">
               <div style="font-family:'Share Tech Mono',monospace;font-size:8px;letter-spacing:.2em;color:var(--text-dim);margin-bottom:8px;">PHONE NUMBER</div>
-              <input id="alert-phone" type="tel" placeholder="10-digit number" style="width:100%;background:transparent;border:none;border-bottom:1px solid rgba(40,168,85,.2);outline:none;padding:10px 0;font-family:'Share Tech Mono',monospace;font-size:12px;color:var(--text-hi);transition:border-color .2s;" />
+              <input id="alert-phone" type="tel" placeholder="+1 (555) 555-5555" oninput="formatPhone(this)" style="width:100%;background:transparent;border:none;border-bottom:1px solid rgba(40,168,85,.2);outline:none;padding:10px 0;font-family:'Share Tech Mono',monospace;font-size:12px;color:var(--text-hi);transition:border-color .2s;" />
             </div>
             <div style="margin-bottom:20px;">
               <div style="font-family:'Share Tech Mono',monospace;font-size:8px;letter-spacing:.2em;color:var(--text-dim);margin-bottom:8px;">CARRIER</div>
@@ -1625,9 +1625,21 @@ async function loadGlobalTheme(){
 // Retailer checks
 document.querySelectorAll('.db-retailer-row').forEach(r=>r.addEventListener('click',()=>r.classList.toggle('checked')));
 
+function formatPhone(input){
+  let v=input.value.replace(/\D/g,'');
+  if(v.startsWith('1'))v=v.slice(1);
+  v=v.slice(0,10);
+  let fmt='';
+  if(v.length>0)fmt='+1 ('+v.slice(0,3);
+  if(v.length>=4)fmt+=') '+v.slice(3,6);
+  if(v.length>=7)fmt+='-'+v.slice(6,10);
+  input.value=fmt;
+  input.dataset.raw=v;
+}
+
 // SMS Signup button
 document.getElementById('sms-signup-btn')?.addEventListener('click',async()=>{
-  const phone=document.getElementById('alert-phone').value.replace(/\D/g,'');
+  const phoneEl=document.getElementById('alert-phone');const phone=phoneEl.dataset.raw||phoneEl.value.replace(/\D/g,'');
   const carrier=document.getElementById('alert-carrier').value;
   const retailers=[...document.querySelectorAll('.db-retailer-row.checked')].map(r=>r.dataset.retailer);
   const active=document.getElementById('sms-toggle').classList.contains('on');
@@ -1644,14 +1656,14 @@ document.getElementById('sms-signup-btn')?.addEventListener('click',async()=>{
       method:'POST',
       headers:{'Content-Type':'application/json','apikey':'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVma2VhZnp6Y3Z1cGpzcmlub3RpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYwMTk4MzcsImV4cCI6MjA5MTU5NTgzN30.3wpjIrVtcWQDXbFhox_86cuhNak7tx-KH34unsCU-DM'},
       body:JSON.stringify({phone,carrier})
-    }).catch(()=>{});
+    }).then(r=>r.json()).then(d=>console.log('[PokeFinder SMS]',d)).catch(e=>console.error('[PokeFinder SMS]',e));
     showSmsExplosion();
   }catch(e){msg.textContent='SAVE FAILED';setTimeout(()=>msg.textContent='',2500);}
 });
 
 // Save alert settings to Supabase
 document.getElementById('save-alerts-btn')?.addEventListener('click',async()=>{
-  const phone=document.getElementById('alert-phone').value.replace(/\D/g,'');
+  const phoneEl=document.getElementById('alert-phone');const phone=phoneEl.dataset.raw||phoneEl.value.replace(/\D/g,'');
   const carrier=document.getElementById('alert-carrier').value;
   const retailers=[...document.querySelectorAll('.db-retailer-row.checked')].map(r=>r.dataset.retailer);
   const active=document.getElementById('sms-toggle').classList.contains('on');
