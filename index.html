@@ -365,21 +365,82 @@ nav{position:fixed;top:0;left:0;right:0;display:flex;align-items:center;justify-
 .db-sdot{width:4px;height:4px;border-radius:50%;background:var(--sp-bright);animation:dotP 2.5s ease-in-out infinite;}
 .db-sdot.r{background:var(--red);}
 
-.featured-card{border:1px solid var(--sp-bright);box-shadow:0 0 20px rgba(40,168,85,.2);padding:18px 22px;margin-bottom:32px;display:grid;grid-template-columns:1fr auto;gap:16px;align-items:center;cursor:crosshair;transition:box-shadow .3s;animation:featPulse 3s ease-in-out infinite;}
-@keyframes featPulse{0%,100%{box-shadow:0 0 20px rgba(40,168,85,.2);}50%{box-shadow:0 0 36px rgba(40,168,85,.42);}}
-.featured-card:hover{box-shadow:0 0 44px rgba(40,168,85,.55);}
+/* ── FEATURED CARD (LIVE tab) ── */
+.feat-card{border:1px solid var(--sp-bright);box-shadow:0 0 20px rgba(40,168,85,.2);padding:20px 24px;margin-bottom:32px;display:grid;grid-template-columns:1fr auto;gap:16px;align-items:center;cursor:crosshair;transition:box-shadow .3s;animation:featPulse 3s ease-in-out infinite;}
+@keyframes featPulse{0%,100%{box-shadow:0 0 20px rgba(40,168,85,.2);}50%{box-shadow:0 0 40px rgba(40,168,85,.45);}}
+.feat-card:hover{box-shadow:0 0 50px rgba(40,168,85,.6);}
 .feat-tag{font-family:'Share Tech Mono',monospace;font-size:7px;letter-spacing:.4em;color:var(--sp-bright);opacity:.7;margin-bottom:6px;display:flex;align-items:center;gap:6px;}
 .feat-tag::before{content:'';width:5px;height:5px;border-radius:50%;background:var(--red);animation:dotP 1.5s ease-in-out infinite;flex-shrink:0;}
-.feat-name{font-family:'IBM Plex Mono',monospace;font-size:13px;color:var(--text-hi);margin-bottom:7px;line-height:1.3;}
-.feat-meta{display:flex;gap:14px;flex-wrap:wrap;align-items:center;}
+.feat-name{font-family:'IBM Plex Mono',monospace;font-size:14px;color:var(--text-hi);margin-bottom:8px;line-height:1.3;}
+.feat-meta{display:flex;gap:16px;flex-wrap:wrap;align-items:center;}
 .feat-retailer{font-family:'Share Tech Mono',monospace;font-size:9px;letter-spacing:.2em;color:var(--sp-bright);}
-.feat-price{font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--text);}
-.feat-msrp{font-size:8px;letter-spacing:.1em;margin-left:4px;}
-.feat-msrp.above{color:#ff8844;}.feat-msrp.below{color:var(--sp-bright);}
+.feat-price{font-family:'IBM Plex Mono',monospace;font-size:13px;color:var(--text);}
+.feat-msrp-above{font-size:8px;color:#ff8844;letter-spacing:.1em;margin-left:4px;}
+.feat-msrp-below{font-size:8px;color:var(--sp-bright);letter-spacing:.1em;margin-left:4px;}
 .feat-avail{font-family:'Share Tech Mono',monospace;font-size:8px;letter-spacing:.15em;color:var(--sp-bright);opacity:.7;}
 .feat-time{font-family:'Share Tech Mono',monospace;font-size:9px;color:var(--text-dim);}
-.feat-cta{font-family:'Share Tech Mono',monospace;font-size:10px;letter-spacing:.25em;color:var(--sp-bright);white-space:nowrap;text-align:right;}
+.feat-cta{font-family:'Share Tech Mono',monospace;font-size:11px;letter-spacing:.25em;color:var(--sp-bright);white-space:nowrap;text-align:right;}
 .feat-cta::after{content:' →';}
+
+/* ── ALERTS PANE — wider, more spacious ── */
+.db-alerts-wrap{max-width:100%;}
+.db-alerts-section{margin-bottom:48px;}
+.db-alerts-stitle{font-family:'Share Tech Mono',monospace;font-size:9px;letter-spacing:.3em;color:var(--text-dim);margin-bottom:20px;}
+.db-toggle-label{font-family:'DM Mono',monospace;font-size:14px;color:var(--text-hi);}
+.db-retailer-name{font-family:'Share Tech Mono',monospace;font-size:12px;letter-spacing:.2em;color:var(--text);}
+
+/* ── SMS SIGNUP BUTTON ── */
+.sms-signup-btn{
+  display:block;width:100%;margin-top:24px;
+  background:transparent;
+  border:1px solid var(--sp-bright);
+  border-radius:8px;
+  outline:none;padding:16px 24px;
+  cursor:crosshair;
+  font-family:'Share Tech Mono',monospace;font-size:11px;letter-spacing:.3em;
+  color:var(--sp-bright);
+  text-shadow:0 0 8px rgba(40,168,85,.5);
+  animation:featPulse 3s ease-in-out infinite;
+  transition:background .2s;
+}
+.sms-signup-btn:hover{background:rgba(40,168,85,.06);}
+
+/* ── SMS EXPLOSION OVERLAY ── */
+#sms-overlay{
+  position:fixed;inset:0;z-index:9999;
+  background:rgba(0,0,0,.92);
+  display:flex;align-items:center;justify-content:center;
+  opacity:0;pointer-events:none;
+  transition:opacity .3s;
+  flex-direction:column;gap:0;
+}
+#sms-overlay.show{opacity:1;pointer-events:all;}
+.sms-explode-dot{
+  width:10px;height:10px;border-radius:50%;
+  background:var(--sp-bright);
+  box-shadow:0 0 20px var(--sp-bright);
+  animation:explodeDot .6s cubic-bezier(.23,1,.32,1) forwards;
+}
+@keyframes explodeDot{
+  0%{transform:scale(1);opacity:1;}
+  100%{transform:scale(60);opacity:0;}
+}
+.sms-confirm-text{
+  font-family:'Syncopate',sans-serif;font-size:clamp(16px,3vw,32px);font-weight:700;
+  letter-spacing:.15em;color:var(--text-hi);
+  text-align:center;
+  opacity:0;transform:translateY(20px);
+  animation:fadeUp .6s ease forwards .5s;
+  text-shadow:0 0 40px rgba(40,168,85,.6);
+  padding:0 32px;
+}
+.sms-confirm-sub{
+  font-family:'Share Tech Mono',monospace;font-size:11px;letter-spacing:.3em;
+  color:var(--sp-bright);text-align:center;
+  opacity:0;transform:translateY(16px);
+  animation:fadeUp .6s ease forwards .75s;
+  margin-top:16px;
+}
 </style>
 </head>
 <body>
@@ -482,7 +543,7 @@ nav{position:fixed;top:0;left:0;right:0;display:flex;align-items:center;justify-
       <div class="db-pane-header">
         <span class="db-pane-label"><span class="db-live-pip"></span>LIVE RESTOCK FEED</span>
       </div>
-      <div id="featured-card" style="margin-bottom:28px;"></div>
+      <div id="feat-card-wrap"></div>
       <div class="db-filters">
         <button class="db-filter active" data-f="all">ALL</button>
         <button class="db-filter" data-f="target">TARGET</button>
@@ -539,7 +600,9 @@ nav{position:fixed;top:0;left:0;right:0;display:flex;align-items:center;justify-
             </div>
           </div>
         </div>
-        <div class="db-alerts-section">
+        <button class="sms-signup-btn" id="sms-signup-btn">📲 &nbsp; SIGN UP FOR SMS ALERTS</button>
+        <div id="alerts-save-msg" style="font-family:'Share Tech Mono',monospace;font-size:9px;letter-spacing:.2em;color:var(--sp-bright);height:16px;margin-top:8px;"></div>
+        <div class="db-alerts-section" style="margin-top:32px;">
           <div class="db-alerts-stitle">RETAILERS TO GET TEXTED FOR</div>
           <div class="db-retailer-row checked" data-retailer="TARGET"><span class="db-retailer-name">TARGET</span><div class="db-check"></div></div>
           <div class="db-retailer-row checked" data-retailer="WALMART"><span class="db-retailer-name">WALMART</span><div class="db-check"></div></div>
@@ -549,8 +612,7 @@ nav{position:fixed;top:0;left:0;right:0;display:flex;align-items:center;justify-
           <div class="db-retailer-row" data-retailer="GAMESTOP"><span class="db-retailer-name">GAMESTOP</span><div class="db-check"></div></div>
           <div class="db-retailer-row" data-retailer="BEST BUY"><span class="db-retailer-name">BEST BUY</span><div class="db-check"></div></div>
         </div>
-        <button id="save-alerts-btn" style="font-family:'Share Tech Mono',monospace;font-size:11px;letter-spacing:.3em;color:var(--sp-bright);background:transparent;border:1px solid var(--sp-bright);outline:none;padding:14px 24px;cursor:crosshair;position:relative;text-shadow:0 0 8px rgba(40,168,85,.4);width:100%;text-align:center;animation:featPulse 3s ease-in-out infinite;margin-top:12px;">📲 SIGN UP FOR SMS ALERTS</button>
-        <div id="alerts-save-msg" style="font-family:'Share Tech Mono',monospace;font-size:9px;letter-spacing:.2em;color:var(--sp-bright);height:16px;"></div>
+        
       </div>
     </div>
 
@@ -940,7 +1002,7 @@ function subscribeRealtime(){
         discord_msg_id:r.discord_msg_id
       });
       if(dbFeedData.length>50)dbFeedData.pop();
-      renderDbFeed();renderFeaturedCard();renderFeaturedCard();
+      renderDbFeed();renderFeaturedCard();
       // Flash status bar
       const sb=document.querySelector('.db-statusbar');
       if(sb){sb.style.borderTopColor='rgba(40,168,85,.4)';setTimeout(()=>{sb.style.borderTopColor='';},600);}
@@ -1532,8 +1594,26 @@ async function loadGlobalTheme(){
 // Retailer checks
 document.querySelectorAll('.db-retailer-row').forEach(r=>r.addEventListener('click',()=>r.classList.toggle('checked')));
 
-// Save alert settings to Supabase
+// SMS Signup button
 document.getElementById('sms-signup-btn')?.addEventListener('click',async()=>{
+  const phone=document.getElementById('alert-phone').value.replace(/\D/g,'');
+  const carrier=document.getElementById('alert-carrier').value;
+  const retailers=[...document.querySelectorAll('.db-retailer-row.checked')].map(r=>r.dataset.retailer);
+  const active=document.getElementById('sms-toggle').classList.contains('on');
+  const msg=document.getElementById('alerts-save-msg');
+  if(!phone||phone.length!==10){msg.textContent='ENTER VALID 10-DIGIT NUMBER';setTimeout(()=>msg.textContent='',2500);return;}
+  if(!carrier){msg.textContent='SELECT A CARRIER';setTimeout(()=>msg.textContent='',2500);return;}
+  if(!window._sb){msg.textContent='NOT CONNECTED';return;}
+  const user=(await window._sb.auth.getUser()).data?.user;
+  if(!user){msg.textContent='SIGN IN TO SAVE ALERTS';return;}
+  try{
+    await window._sb.from('alert_subscriptions').upsert({user_id:user.id,phone_number:phone,carrier,retailers,active},{onConflict:'user_id'});
+    showSmsExplosion();
+  }catch(e){msg.textContent='SAVE FAILED';setTimeout(()=>msg.textContent='',2500);}
+});
+
+// Save alert settings to Supabase
+document.getElementById('save-alerts-btn')?.addEventListener('click',async()=>{
   const phone=document.getElementById('alert-phone').value.replace(/\D/g,'');
   const carrier=document.getElementById('alert-carrier').value;
   const retailers=[...document.querySelectorAll('.db-retailer-row.checked')].map(r=>r.dataset.retailer);
@@ -1570,6 +1650,7 @@ async function loadAlertPrefs(){
 }
 
 // Exit
+document.getElementById('sms-overlay')?.addEventListener('click',()=>document.getElementById('sms-overlay').classList.remove('show'));
 document.getElementById('db-exit-btn').addEventListener('click',()=>{
   document.getElementById('dashboard').classList.remove('open');
   document.getElementById('landing').style.display='';
@@ -1580,63 +1661,47 @@ document.getElementById('db-logo').addEventListener('click',()=>{
 });
 
 
+// ── FEATURED CARD ──
 function renderFeaturedCard(){
-  const el=document.getElementById('featured-card');
-  if(!el)return;
-  // Show most recent drop regardless of status
-  const item=dbFeedData[0];
-  if(!item){el.style.opacity='.4';el.textContent='AWAITING DROPS...';return;}
-  const msrpMap={TARGET:49.99,WALMART:49.99,COSTCO:44.99,"SAM'S CLUB":44.99,AMAZON:49.99,GAMESTOP:54.99};
-  const msrp=msrpMap[item.retailer]||49.99;
-  const aboveMsrp=item.price>msrp+0.5;
-  const belowMsrp=item.price<msrp-0.5;
-  const msrpLabel=aboveMsrp?`<span class="fc-msrp" style="color:#ff8844;">(ABOVE MSRP)</span>`:belowMsrp?`<span class="fc-msrp" style="color:var(--sp-bright);">(BELOW MSRP ✓)</span>`:`<span class="fc-msrp" style="color:var(--text-dim);">(AT MSRP)</span>`;
-  el.className='featured-card';
-  el.style.opacity='1';
-  el.onclick=()=>{if(item.url)window.open(item.url,'_blank');};
-  el.innerHTML=`
-    <div class="fc-img">📦</div>
-    <div class="fc-info">
-      <div class="fc-tag">${item.status==='LIVE'?'● IN STOCK':'◌ LAST DROP'}</div>
-      <div class="fc-name">${item.product}</div>
-      <div class="fc-meta">
-        <span class="fc-retailer">${item.retailer}</span>
-        <span class="fc-price">$${item.price.toFixed(2)}</span>
-        ${msrpLabel}
-        <span class="fc-avail">${item.avail}</span>
-        <span class="fc-time">${timeAgo(item.ts)}</span>
-      </div>
-    </div>
-    <div class="fc-cta">SHOP NOW</div>
-  `;
-}
-
-
-function renderFeaturedCard(){
-  const el=document.getElementById('featured-card');
-  if(!el||!dbFeedData.length)return;
-  // Show latest drop regardless of status
+  const el=document.getElementById('feat-card-wrap');
+  if(!el||!dbFeedData.length){if(el)el.innerHTML='';return;}
   const item=dbFeedData.find(r=>r.status==='LIVE')||dbFeedData[0];
   if(!item){el.innerHTML='';return;}
-  const msrpMap={'TARGET':49.99,'WALMART':49.99,'COSTCO':44.99,"SAM'S CLUB":44.99,'AMAZON':49.99,'GAMESTOP':49.99,'BEST BUY':49.99};
-  const msrp=msrpMap[item.retailer]||49.99;
+  const msrpRef={'TARGET':49.99,'WALMART':49.99,'COSTCO':44.99,"SAM'S CLUB":44.99,'AMAZON':49.99,'GAMESTOP':49.99,'BEST BUY':49.99};
+  const msrp=msrpRef[item.retailer]||49.99;
   const diff=item.price-msrp;
-  const msrpLabel=diff>1?`<span class="feat-msrp above">+$${diff.toFixed(2)} MSRP</span>`:diff<-1?`<span class="feat-msrp below">BELOW MSRP ✓</span>`:`<span class="feat-msrp below">AT MSRP ✓</span>`;
-  el.className='featured-card';
-  el.onclick=()=>{if(item.url)window.open(item.url,'_blank');};
-  el.innerHTML=`
+  const msrpTag=diff>1?`<span class="feat-msrp-above">+$${diff.toFixed(2)} ABOVE MSRP</span>`:diff<-1?`<span class="feat-msrp-below">BELOW MSRP ✓</span>`:`<span class="feat-msrp-below">AT MSRP</span>`;
+  el.innerHTML=`<div class="feat-card" onclick="${item.url?`window.open('${item.url}','_blank')`:''}">
     <div>
       <div class="feat-tag">LATEST DROP</div>
       <div class="feat-name">${item.product}</div>
       <div class="feat-meta">
         <span class="feat-retailer">${item.retailer}</span>
-        <span class="feat-price">$${item.price.toFixed(2)}${msrpLabel}</span>
+        <span class="feat-price">$${item.price.toFixed(2)}${msrpTag}</span>
         <span class="feat-avail">${item.avail}</span>
         <span class="feat-time">${timeAgo(item.ts)}</span>
       </div>
     </div>
     <div class="feat-cta">${item.url?'BUY NOW':'VIEW'}</div>
-  `;
+  </div>`;
+}
+
+// ── SMS EXPLOSION ──
+function showSmsExplosion(){
+  const overlay=document.getElementById('sms-overlay');
+  const dot=document.getElementById('sms-dot');
+  if(!overlay||!dot)return;
+  // reset
+  dot.style.animation='none';
+  overlay.classList.add('show');
+  requestAnimationFrame(()=>{
+    requestAnimationFrame(()=>{
+      dot.style.animation='explodeDot .8s cubic-bezier(.23,1,.32,1) forwards';
+    });
+  });
+  setTimeout(()=>{
+    overlay.classList.remove('show');
+  },3200);
 }
 function openDashboard(username){
   document.getElementById('landing').style.display='none';
@@ -1751,5 +1816,11 @@ if(window.location.hash.includes('access_token') || window.location.search.inclu
 }
 
 </script>
+
+<div id="sms-overlay">
+  <div class="sms-explode-dot" id="sms-dot"></div>
+  <div class="sms-confirm-text">YOU'RE SIGNED UP FOR<br>TEXT ALERTS</div>
+  <div class="sms-confirm-sub">WE'LL TEXT YOU THE SECOND A DROP GOES LIVE</div>
+</div>
 </body>
 </html>
