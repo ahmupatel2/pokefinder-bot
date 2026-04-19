@@ -1639,6 +1639,12 @@ document.getElementById('sms-signup-btn')?.addEventListener('click',async()=>{
   if(!user){msg.textContent='SIGN IN TO SAVE ALERTS';return;}
   try{
     await window._sb.from('alert_subscriptions').upsert({user_id:user.id,phone_number:phone,carrier,retailers,active},{onConflict:'user_id'});
+    // Send confirmation SMS via edge function
+    fetch('https://efkeafzzcvupjsrinoti.supabase.co/functions/v1/send-confirmation-sms',{
+      method:'POST',
+      headers:{'Content-Type':'application/json','apikey':'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVma2VhZnp6Y3Z1cGpzcmlub3RpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYwMTk4MzcsImV4cCI6MjA5MTU5NTgzN30.3wpjIrVtcWQDXbFhox_86cuhNak7tx-KH34unsCU-DM'},
+      body:JSON.stringify({phone,carrier})
+    }).catch(()=>{});
     showSmsExplosion();
   }catch(e){msg.textContent='SAVE FAILED';setTimeout(()=>msg.textContent='',2500);}
 });
