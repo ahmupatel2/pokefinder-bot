@@ -252,6 +252,20 @@ def parse_trackalacker(message: discord.Message) -> dict | None:
 def save_restock(data: dict) -> bool:
     try:
         supabase.table("restocks").insert(data).execute()
+        # Write to drop_patterns for intelligence tracking
+        try:
+            from datetime import datetime, timezone
+            now = datetime.now(timezone.utc)
+            supabase.table("drop_patterns").insert({
+                "retailer": data.get("retailer", "UNKNOWN"),
+                "dropped_at": now.isoformat(),
+                "day_of_week": now.weekday(),  # 0=Monday in Python
+                "hour_of_day": now.hour,
+                "product_name": data.get("product_name"),
+                "price": float(data.get("price", 0)) if data.get("price") else None
+            }).execute()
+        except Exception as pe:
+            print(f"[WARN] drop_patterns insert failed: {pe}")
         return True
     except Exception as e:
         print(f"[ERROR] Supabase insert failed: {e}")
