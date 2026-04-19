@@ -1895,6 +1895,7 @@ if(window.location.hash.includes('access_token') || window.location.search.inclu
 }
 
 
+
 // ── RADAR GLOBE ──
 let radarLoaded=false;
 let dropPatterns=[];
@@ -1903,9 +1904,8 @@ let totalDropCount=0;
 async function loadRadar(){
   if(radarLoaded)return;
   radarLoaded=true;
-  // Fetch drop patterns from Supabase
   try{
-    const resp=await fetch('https://efkeafzzcvupjsrinoti.supabase.co/rest/v1/drop_patterns?select=retailer,dropped_at,day_of_week,hour_of_day,product_name&order=dropped_at.desc&limit=500',{
+    const resp=await fetch('https://efkeafzzcvupjsrinoti.supabase.co/rest/v1/drop_patterns?select=retailer,dropped_at,day_of_week,hour_of_day,product_name,price&order=dropped_at.desc&limit=500',{
       headers:{'apikey':'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVma2VhZnp6Y3Z1cGpzcmlub3RpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYwMTk4MzcsImV4cCI6MjA5MTU5NTgzN30.3wpjIrVtcWQDXbFhox_86cuhNak7tx-KH34unsCU-DM','Content-Type':'application/json'}
     });
     dropPatterns=await resp.json();
@@ -1917,121 +1917,37 @@ async function loadRadar(){
 
 function updateRadarCounter(){
   const el=document.getElementById('radar-counter');
-  if(!el)return;
-  el.textContent='DROPS TRACKED: '+totalDropCount+' · PATTERNS ACTIVE';
+  if(el)el.textContent='DROPS TRACKED: '+totalDropCount+' \u00b7 PATTERNS ACTIVE';
 }
 
 function loadGlobeIframe(){
   const iframe=document.getElementById('radar-iframe');
   if(!iframe)return;
-  // Build the globe HTML with pattern data injected
-  const patternData=JSON.stringify(dropPatterns.slice(0,200));
-  const globeHtml=buildGlobeHtml(patternData,totalDropCount);
-  iframe.srcdoc=globeHtml;
+  // Pass data to iframe via postMessage after load
+  iframe.src='https://efkeafzzcvupjsrinoti.supabase.co/functions/v1/radar-globe';
+  iframe.onload=()=>{
+    setTimeout(()=>{
+      iframe.contentWindow.postMessage({type:'PATTERNS',data:dropPatterns,total:totalDropCount},'*');
+    },500);
+  };
 }
 
-// Subscribe to new drops and add to counter
 function subscribeRadarRealtime(){
   if(!window._sb)return;
   window._sb.channel('radar-drops').on('postgres_changes',{event:'INSERT',schema:'public',table:'drop_patterns'},payload=>{
     totalDropCount++;
     dropPatterns.unshift(payload.new);
     updateRadarCounter();
-    // Reload globe with new data if radar tab is active
     const radarPane=document.getElementById('pane-radar');
     if(radarPane&&radarPane.classList.contains('active')){
-      radarLoaded=false;
-      loadRadar();
+      const iframe=document.getElementById('radar-iframe');
+      if(iframe&&iframe.contentWindow){
+        iframe.contentWindow.postMessage({type:'NEW_DROP',drop:payload.new,total:totalDropCount},'*');
+      }
     }
   }).subscribe();
 }
-
-function buildGlobeHtml(patternDataJson,totalCount){
-  return `<!doctype html>
-<html lang="en"><head><meta charset="utf-8"/>
-<meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>POKEFINDER RADAR</title>
-<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Syncopate:wght@400;700&display=swap" rel="stylesheet"/>
-<style>
-:root{--accent:#28a855;--accent-dim:#1a6e38;--text:#c8e6d0;--dim:#3a5c45;--faint:#1a2e20;--mono:'Share Tech Mono',monospace;}
-*{box-sizing:border-box;margin:0;padding:0;}
-html,body{background:#000;color:var(--text);font-family:var(--mono);height:100%;overflow:hidden;-webkit-font-smoothing:antialiased;}
-#stage{position:fixed;inset:0;background:radial-gradient(ellipse at 50% 50%,#030a05 0%,#010302 50%,#000 100%);}
-canvas{display:block;}
-.scanlines{position:fixed;inset:0;pointer-events:none;z-index:2;background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,0.06) 2px,rgba(0,0,0,0.06) 4px);}
-.vignette{position:fixed;inset:0;pointer-events:none;z-index:3;background:radial-gradient(ellipse at center,transparent 45%,rgba(0,0,0,0.92) 100%);}
-.hud{position:fixed;inset:0;pointer-events:none;z-index:10;}
-.topbar{position:absolute;top:16px;left:20px;right:20px;display:flex;justify-content:space-between;align-items:center;font-size:8px;letter-spacing:.35em;text-transform:uppercase;color:var(--dim);border-bottom:1px solid rgba(40,168,85,.08);padding-bottom:10px;}
-.brand{display:flex;align-items:center;gap:10px;color:var(--text);}
-.brand .mark{width:7px;height:7px;border-radius:50%;background:var(--accent);box-shadow:0 0 10px var(--accent);animation:pulse 2.4s ease-in-out infinite;}
-@keyframes pulse{0%,100%{box-shadow:0 0 10px var(--accent);}50%{box-shadow:0 0 20px var(--accent),0 0 40px rgba(40,168,85,.4);}}
-.brand .name{font-family:'Syncopate',sans-serif;font-size:10px;font-weight:700;letter-spacing:.4em;color:var(--accent);}
-.counter{font-size:8px;letter-spacing:.2em;color:var(--dim);text-align:right;}
-.counter .v{color:var(--accent);}
-.statusrail{position:absolute;left:20px;right:20px;bottom:16px;display:flex;justify-content:space-between;align-items:flex-end;font-size:8px;color:var(--dim);letter-spacing:.25em;text-transform:uppercase;border-top:1px solid rgba(40,168,85,.08);padding-top:10px;}
-.cta{display:inline-flex;align-items:center;gap:8px;padding:7px 16px;border:1px solid rgba(40,168,85,.3);color:var(--accent);font-size:8px;letter-spacing:.3em;pointer-events:auto;cursor:crosshair;transition:all .3s;background:rgba(40,168,85,.02);}
-.cta:hover{border-color:rgba(40,168,85,.7);background:rgba(40,168,85,.05);}
-.cta .d{width:4px;height:4px;border-radius:50%;background:var(--accent);box-shadow:0 0 8px var(--accent);animation:pulse 2.4s infinite;}
-.card{position:absolute;top:50%;right:50px;transform:translateY(-50%) translateX(12px);width:240px;padding:18px;background:rgba(2,8,4,.88);border:1px solid rgba(40,168,85,.25);backdrop-filter:blur(16px);pointer-events:auto;opacity:0;transition:opacity .3s,transform .3s;}
-.card::before{content:"";position:absolute;top:-1px;left:-1px;width:10px;height:10px;border-top:1px solid var(--accent);border-left:1px solid var(--accent);}
-.card::after{content:"";position:absolute;bottom:-1px;right:-1px;width:10px;height:10px;border-bottom:1px solid var(--accent);border-right:1px solid var(--accent);}
-.card.visible{opacity:1;transform:translateY(-50%) translateX(0);}
-.card .ey{font-size:7px;letter-spacing:.35em;color:var(--dim);display:flex;justify-content:space-between;margin-bottom:10px;text-transform:uppercase;}
-.card h2{font-family:'Syncopate',sans-serif;font-size:14px;font-weight:700;color:var(--accent);margin-bottom:3px;letter-spacing:.1em;}
-.card .sub{font-size:7.5px;letter-spacing:.22em;color:var(--dim);text-transform:uppercase;margin-bottom:14px;}
-.card .grid{display:grid;grid-template-columns:1fr 1fr;gap:10px 14px;margin-bottom:14px;}
-.card .cell .k{font-size:7px;color:var(--dim);letter-spacing:.22em;text-transform:uppercase;margin-bottom:3px;}
-.card .cell .v{font-size:10px;color:var(--text);letter-spacing:.06em;}
-.card .cell .v.ok{color:#6ee89a;}.card .cell .v.warn{color:#e8c96e;}.card .cell .v.no{color:#e86e6e;}
-.card .bar{height:1px;background:rgba(40,168,85,.1);position:relative;margin-top:5px;}
-.card .bar>i{position:absolute;inset:0 auto 0 0;background:linear-gradient(90deg,var(--accent-dim),var(--accent));}
-.card .actions{display:flex;gap:7px;border-top:1px solid rgba(40,168,85,.08);padding-top:10px;}
-.card .btn{flex:1;padding:7px;background:transparent;border:1px solid rgba(40,168,85,.22);color:var(--accent);font-family:var(--mono);font-size:7.5px;letter-spacing:.28em;text-transform:uppercase;cursor:crosshair;transition:all .2s;}
-.card .btn:hover{background:rgba(40,168,85,.06);border-color:rgba(40,168,85,.6);}
-.card .btn.ghost{border-color:rgba(40,168,85,.1);color:var(--dim);}
-.target{position:absolute;pointer-events:none;transform:translate(-50%,-50%);font-size:7.5px;letter-spacing:.28em;text-transform:uppercase;color:var(--text);opacity:0;transition:opacity .15s;white-space:nowrap;z-index:7;}
-.target .box{display:inline-block;padding:2px 8px;background:rgba(0,5,2,.85);border:1px solid rgba(40,168,85,.5);transform:translateY(-22px);}
-.target .box .dot{display:inline-block;width:3px;height:3px;background:var(--accent);border-radius:50%;margin-right:7px;vertical-align:middle;box-shadow:0 0 5px var(--accent);}
-.target.visible{opacity:1;}
-.boot{position:fixed;inset:0;z-index:20;display:flex;align-items:center;justify-content:center;background:#000;font-family:var(--mono);color:var(--dim);font-size:8px;letter-spacing:.35em;text-transform:uppercase;transition:opacity .8s;}
-.boot.hidden{opacity:0;pointer-events:none;}
-.boot .center{text-align:center;line-height:2.2;}
-.boot .center b{color:var(--accent);font-family:'Syncopate',sans-serif;font-weight:700;letter-spacing:.4em;font-size:11px;}
-.boot .ring{width:32px;height:32px;margin:0 auto 18px;border:1px solid rgba(40,168,85,.2);border-top-color:var(--accent);border-radius:50%;animation:spin 1.4s linear infinite;}
-@keyframes spin{to{transform:rotate(360deg)}}
-</style></head>
-<body data-phase="closed">
-<div id="stage"></div><div class="scanlines"></div><div class="vignette"></div>
-<div class="hud">
-  <div class="topbar">
-    <div class="brand"><div class="mark"></div><div class="name">RADAR</div><span style="color:var(--faint,#1a2e20);margin:0 6px;">//</span><span style="font-size:7px;letter-spacing:.3em;color:var(--dim);">INTELLIGENCE GRID</span></div>
-    <div class="counter"><span class="v" id="drop-total">${totalCount}</span> DROPS TRACKED</div>
-  </div>
-  <div class="card" id="card">
-    <div class="ey"><span>◢ NODE</span><span id="card-id">N-00</span></div>
-    <h2 id="card-name">—</h2>
-    <div class="sub" id="card-cat">RETAILER</div>
-    <div class="grid">
-      <div class="cell"><div class="k">TOTAL DROPS</div><div class="v" id="card-drops">—</div></div>
-      <div class="cell"><div class="k">BEST DAY</div><div class="v" id="card-day">—</div></div>
-      <div class="cell"><div class="k">BEST HOUR</div><div class="v" id="card-hour">—</div></div>
-      <div class="cell"><div class="k">AVG PRICE</div><div class="v" id="card-price">—</div></div>
-    </div>
-    <div class="cell" style="margin-bottom:14px;">
-      <div class="k" style="font-size:7px;color:var(--dim);letter-spacing:.22em;text-transform:uppercase;margin-bottom:3px;">SIGNAL STRENGTH</div>
-      <div class="bar"><i id="card-bar" style="width:60%"></i></div>
-    </div>
-    <div class="actions"><button class="btn ghost" id="card-close">RELEASE</button></div>
-  </div>
-  <div class="statusrail">
-    <div style="display:flex;flex-direction:column;gap:3px;"><span>SYSTEM</span><span style="color:var(--text);letter-spacing:.12em;" id="sys-state">STANDBY</span></div>
-    <div class="cta" id="cta"><span class="d"></span><span id="cta-label">TAP CORE TO UNSEAL</span></div>
-    <div style="display:flex;flex-direction:column;gap:3px;align-items:flex-end;"><span>RENDERER</span><span style="color:var(--text);" id="rend-label">— fps</span></div>
-  </div>
-  <div class="target" id="target"><div class="box"><span class="dot"></span><span id="target-label">NODE</span></div></div>
-</div>
-<div class="boot" id="boot"><div class="center"><div class="ring"></div><div><b>POKEFINDER</b></div><div style="margin-top:4px;">loading intelligence grid</div></div></div>
-<script>const __PATTERNS__=${patternDataJson};</script>
+</script>
 <script type="importmap">{"imports":{"three":"https://unpkg.com/three@0.160.0/build/three.module.js","three/addons/":"https://unpkg.com/three@0.160.0/examples/jsm/"}}</script>
 <script type="module">
 import * as THREE from 'three';
