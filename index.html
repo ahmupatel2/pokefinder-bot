@@ -1664,8 +1664,23 @@ document.getElementById('db-logo').addEventListener('click',()=>{
 // ── FEATURED CARD ──
 function renderFeaturedCard(){
   const el=document.getElementById('feat-card-wrap');
-  if(!el||!dbFeedData.length){if(el)el.innerHTML='';return;}
-  const item=dbFeedData.find(r=>r.status==='LIVE')||dbFeedData[0];
+  if(!el)return;
+  // If we have data already, render immediately
+  if(dbFeedData.length){_doRenderFeatCard(el,dbFeedData.find(r=>r.status==='LIVE')||dbFeedData[0]);return;}
+  // Otherwise fetch latest drop directly from Supabase REST (works without login)
+  fetch('https://efkeafzzcvupjsrinoti.supabase.co/rest/v1/restocks?select=product_name,retailer,price,url,availability,status,created_at&order=created_at.desc&limit=10',{
+    headers:{'apikey':'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVma2VhZnp6Y3Z1cGpzcmlub3RpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYwMTk4MzcsImV4cCI6MjA5MTU5NTgzN30.3wpjIrVtcWQDXbFhox_86cuhNak7tx-KH34unsCU-DM','Content-Type':'application/json'}
+  }).then(r=>r.json()).then(rows=>{
+    if(!rows||!rows.length){el.innerHTML='';return;}
+    const r=rows.find(x=>x.status==='LIVE')||rows[0];
+    _doRenderFeatCard(el,{
+      product:r.product_name,retailer:r.retailer,price:parseFloat(r.price)||0,
+      url:r.url,avail:r.availability||'ONLINE',ts:new Date(r.created_at),status:r.status
+    });
+  }).catch(()=>{el.innerHTML='';});
+  return;
+}
+function _doRenderFeatCard(el,item){
   if(!item){el.innerHTML='';return;}
   const msrpRef={'TARGET':49.99,'WALMART':49.99,'COSTCO':44.99,"SAM'S CLUB":44.99,'AMAZON':49.99,'GAMESTOP':49.99,'BEST BUY':49.99};
   const msrp=msrpRef[item.retailer]||49.99;
@@ -1805,6 +1820,8 @@ function onSignedOut(){window._currentUser=null;
 const _s=document.createElement('script');
 _s.src='https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js';
 _s.onload=initAuth;
+// Show latest drop card immediately for everyone
+setTimeout(renderFeaturedCard, 800);
 fetch('https://efkeafzzcvupjsrinoti.supabase.co/rest/v1/settings?key=eq.theme_color&select=value',{headers:{'apikey':'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVma2VhZnp6Y3Z1cGpzcmlub3RpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYwMTk4MzcsImV4cCI6MjA5MTU5NTgzN30.3wpjIrVtcWQDXbFhox_86cuhNak7tx-KH34unsCU-DM'}}).then(r=>r.json()).then(d=>{if(d[0]?.value)applyThemeColor(d[0].value,false);}).catch(()=>{});
 // Load immediately so OAuth redirects don't miss the session
 document.head.appendChild(_s);
