@@ -39,6 +39,34 @@ CARRIER_GATEWAYS = {
     "uscellular": "{number}@email.uscc.net",
 }
 
+
+def send_sms_confirmation(phone: str, carrier: str):
+    """Send a welcome/confirmation SMS when a user signs up for alerts."""
+    if not GMAIL_USER or not GMAIL_PASS:
+        return
+    gateway = CARRIER_GATEWAYS.get(carrier.lower().replace(" ", ""))
+    if not gateway or not phone:
+        return
+    sms_email = gateway.format(number=phone)
+    msg_text = (
+        "Welcome to PokeFinder Alerts!\n\n"
+        "You're now subscribed to live restock notifications.\n"
+        "We'll text you the second a Pokemon TCG product drops at "
+        "Target, Walmart, Costco, and more.\n\n"
+        "Reply STOP to unsubscribe."
+    )
+    try:
+        msg = MIMEText(msg_text)
+        msg["From"] = GMAIL_USER
+        msg["To"] = sms_email
+        msg["Subject"] = ""
+        with smtplib.SMTP_SSL("smtp.gmail.com", 465) as smtp:
+            smtp.login(GMAIL_USER, GMAIL_PASS)
+            smtp.sendmail(GMAIL_USER, sms_email, msg.as_string())
+        print(f"[PokeFinder] Confirmation SMS sent to {sms_email}")
+    except Exception as e:
+        print(f"[PokeFinder] Confirmation SMS failed: {e}")
+
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 client   = discord.Client()
 
