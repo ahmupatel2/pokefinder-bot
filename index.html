@@ -364,6 +364,22 @@ nav{position:fixed;top:0;left:0;right:0;display:flex;align-items:center;justify-
 .db-status-item{font-family:'Share Tech Mono',monospace;font-size:8px;letter-spacing:.14em;color:var(--text-dim);display:flex;align-items:center;gap:5px;}
 .db-sdot{width:4px;height:4px;border-radius:50%;background:var(--sp-bright);animation:dotP 2.5s ease-in-out infinite;}
 .db-sdot.r{background:var(--red);}
+
+.featured-card{border:1px solid var(--sp-bright);box-shadow:0 0 20px rgba(40,168,85,.2);padding:18px 22px;margin-bottom:32px;display:grid;grid-template-columns:1fr auto;gap:16px;align-items:center;cursor:crosshair;transition:box-shadow .3s;animation:featPulse 3s ease-in-out infinite;}
+@keyframes featPulse{0%,100%{box-shadow:0 0 20px rgba(40,168,85,.2);}50%{box-shadow:0 0 36px rgba(40,168,85,.42);}}
+.featured-card:hover{box-shadow:0 0 44px rgba(40,168,85,.55);}
+.feat-tag{font-family:'Share Tech Mono',monospace;font-size:7px;letter-spacing:.4em;color:var(--sp-bright);opacity:.7;margin-bottom:6px;display:flex;align-items:center;gap:6px;}
+.feat-tag::before{content:'';width:5px;height:5px;border-radius:50%;background:var(--red);animation:dotP 1.5s ease-in-out infinite;flex-shrink:0;}
+.feat-name{font-family:'IBM Plex Mono',monospace;font-size:13px;color:var(--text-hi);margin-bottom:7px;line-height:1.3;}
+.feat-meta{display:flex;gap:14px;flex-wrap:wrap;align-items:center;}
+.feat-retailer{font-family:'Share Tech Mono',monospace;font-size:9px;letter-spacing:.2em;color:var(--sp-bright);}
+.feat-price{font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--text);}
+.feat-msrp{font-size:8px;letter-spacing:.1em;margin-left:4px;}
+.feat-msrp.above{color:#ff8844;}.feat-msrp.below{color:var(--sp-bright);}
+.feat-avail{font-family:'Share Tech Mono',monospace;font-size:8px;letter-spacing:.15em;color:var(--sp-bright);opacity:.7;}
+.feat-time{font-family:'Share Tech Mono',monospace;font-size:9px;color:var(--text-dim);}
+.feat-cta{font-family:'Share Tech Mono',monospace;font-size:10px;letter-spacing:.25em;color:var(--sp-bright);white-space:nowrap;text-align:right;}
+.feat-cta::after{content:' →';}
 </style>
 </head>
 <body>
@@ -466,6 +482,7 @@ nav{position:fixed;top:0;left:0;right:0;display:flex;align-items:center;justify-
       <div class="db-pane-header">
         <span class="db-pane-label"><span class="db-live-pip"></span>LIVE RESTOCK FEED</span>
       </div>
+      <div id="featured-card" style="margin-bottom:28px;"></div>
       <div class="db-filters">
         <button class="db-filter active" data-f="all">ALL</button>
         <button class="db-filter" data-f="target">TARGET</button>
@@ -532,7 +549,7 @@ nav{position:fixed;top:0;left:0;right:0;display:flex;align-items:center;justify-
           <div class="db-retailer-row" data-retailer="GAMESTOP"><span class="db-retailer-name">GAMESTOP</span><div class="db-check"></div></div>
           <div class="db-retailer-row" data-retailer="BEST BUY"><span class="db-retailer-name">BEST BUY</span><div class="db-check"></div></div>
         </div>
-        <button id="save-alerts-btn" style="font-family:'Share Tech Mono',monospace;font-size:10px;letter-spacing:.3em;color:var(--sp-bright);background:transparent;border:none;outline:none;padding:14px 0;cursor:crosshair;position:relative;text-shadow:0 0 8px rgba(40,168,85,.4);width:100%;text-align:left;">SAVE ALERT SETTINGS</button>
+        <button id="save-alerts-btn" style="font-family:'Share Tech Mono',monospace;font-size:11px;letter-spacing:.3em;color:var(--sp-bright);background:transparent;border:1px solid var(--sp-bright);outline:none;padding:14px 24px;cursor:crosshair;position:relative;text-shadow:0 0 8px rgba(40,168,85,.4);width:100%;text-align:center;animation:featPulse 3s ease-in-out infinite;margin-top:12px;">📲 SIGN UP FOR SMS ALERTS</button>
         <div id="alerts-save-msg" style="font-family:'Share Tech Mono',monospace;font-size:9px;letter-spacing:.2em;color:var(--sp-bright);height:16px;"></div>
       </div>
     </div>
@@ -797,7 +814,7 @@ function launchPokeball(fromEl){
     }
   })(performance.now());
 }
-['nav-calendar','nav-alerts','nav-scanning'].forEach(id=>document.getElementById(id)?.addEventListener('mouseenter',e=>launchPokeball(e.currentTarget)));
+['nav-calendar','nav-alerts','nav-scanning'].forEach(id=>{const el=document.getElementById(id);if(!el)return;el.addEventListener('mouseenter',e=>{launchPokeball(e.currentTarget);});el.addEventListener('click',e=>{e.preventDefault();if(window._currentUser){const n=window._currentUser.user_metadata?.full_name||window._currentUser.user_metadata?.name||window._currentUser.email?.split('@')[0]||'TRAINER';openDashboard(n);}});});
 
 // ── POKEBALL SPIN ──
 const pbContainer=document.getElementById('pokeball-container');
@@ -827,7 +844,7 @@ pbContainer.addEventListener('mouseleave',()=>{
   glowA=pbGlowRing.animate([{width:'70px',height:'70px'},{width:'0px',height:'0px'}],{duration:400,easing:'ease-out',fill:'forwards'});
   pbInnerBtn.style.fill='#080808';pbInnerBtn.style.stroke='#1d6b35';
 });
-pbInnerBtn.addEventListener('click',()=>{
+pbContainer.addEventListener('click',()=>{
   const o=document.getElementById('signin-overlay');
   o.classList.add('open');
   if(!o._grid){o._grid=true;makeGrid(document.getElementById('signin-canvas'));}
@@ -923,7 +940,7 @@ function subscribeRealtime(){
         discord_msg_id:r.discord_msg_id
       });
       if(dbFeedData.length>50)dbFeedData.pop();
-      renderDbFeed();renderFeaturedCard();
+      renderDbFeed();renderFeaturedCard();renderFeaturedCard();
       // Flash status bar
       const sb=document.querySelector('.db-statusbar');
       if(sb){sb.style.borderTopColor='rgba(40,168,85,.4)';setTimeout(()=>{sb.style.borderTopColor='';},600);}
@@ -1594,6 +1611,33 @@ function renderFeaturedCard(){
   `;
 }
 
+
+function renderFeaturedCard(){
+  const el=document.getElementById('featured-card');
+  if(!el||!dbFeedData.length)return;
+  // Show latest drop regardless of status
+  const item=dbFeedData.find(r=>r.status==='LIVE')||dbFeedData[0];
+  if(!item){el.innerHTML='';return;}
+  const msrpMap={'TARGET':49.99,'WALMART':49.99,'COSTCO':44.99,"SAM'S CLUB":44.99,'AMAZON':49.99,'GAMESTOP':49.99,'BEST BUY':49.99};
+  const msrp=msrpMap[item.retailer]||49.99;
+  const diff=item.price-msrp;
+  const msrpLabel=diff>1?`<span class="feat-msrp above">+$${diff.toFixed(2)} MSRP</span>`:diff<-1?`<span class="feat-msrp below">BELOW MSRP ✓</span>`:`<span class="feat-msrp below">AT MSRP ✓</span>`;
+  el.className='featured-card';
+  el.onclick=()=>{if(item.url)window.open(item.url,'_blank');};
+  el.innerHTML=`
+    <div>
+      <div class="feat-tag">LATEST DROP</div>
+      <div class="feat-name">${item.product}</div>
+      <div class="feat-meta">
+        <span class="feat-retailer">${item.retailer}</span>
+        <span class="feat-price">$${item.price.toFixed(2)}${msrpLabel}</span>
+        <span class="feat-avail">${item.avail}</span>
+        <span class="feat-time">${timeAgo(item.ts)}</span>
+      </div>
+    </div>
+    <div class="feat-cta">${item.url?'BUY NOW':'VIEW'}</div>
+  `;
+}
 function openDashboard(username){
   document.getElementById('landing').style.display='none';
   document.getElementById('dashboard').classList.add('open');
@@ -1671,21 +1715,23 @@ function initAuth(){
     });
   }catch(e){console.warn('Auth:',e);}
 }
-function onSignedIn(user){
+function onSignedIn(user){window._currentUser=user;
   document.getElementById('signin-overlay').classList.remove('open');
   const name=user.user_metadata?.full_name||user.user_metadata?.name||user.email?.split('@')[0]||'TRAINER';
   const avatar=user.user_metadata?.avatar_url;
   document.getElementById('user-badge')?.remove();
   const badge=document.createElement('div');badge.id='user-badge';badge.style.cssText='display:flex;align-items:center;gap:10px;';
   badge.innerHTML=`${avatar?`<img src="${avatar}" style="width:22px;height:22px;border-radius:50%;border:1px solid rgba(40,168,85,.4);object-fit:cover;">`:''}
+    <span style="font-family:Share Tech Mono,monospace;font-size:8px;letter-spacing:.2em;color:var(--sp-bright);opacity:.65;">SIGNED IN AS</span>
     <span style="font-family:Share Tech Mono,monospace;font-size:10px;letter-spacing:.2em;color:var(--sp-bright);text-shadow:0 0 8px rgba(40,168,85,.5);">${name.toUpperCase()}</span>
     <span id="signout-btn" style="font-family:Share Tech Mono,monospace;font-size:9px;letter-spacing:.15em;color:var(--text-dim);cursor:pointer;">[EXIT]</span>`;
   document.querySelector('.nav-right').appendChild(badge);
   document.getElementById('signout-btn').addEventListener('click',()=>window._sb?.auth.signOut());
   const lbl=document.querySelector('.pb-label-text');if(lbl)lbl.textContent=name.toUpperCase();
   openDashboard(name);
+  if(user.email==='ahmupatel2@gmail.com'){initAdminPanel();}
 }
-function onSignedOut(){
+function onSignedOut(){window._currentUser=null;
   document.getElementById('user-badge')?.remove();
   const lbl=document.querySelector('.pb-label-text');if(lbl)lbl.textContent='SIGN IN HERE';
   document.getElementById('dashboard').classList.remove('open');
@@ -1694,6 +1740,7 @@ function onSignedOut(){
 const _s=document.createElement('script');
 _s.src='https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js';
 _s.onload=initAuth;
+fetch('https://efkeafzzcvupjsrinoti.supabase.co/rest/v1/settings?key=eq.theme_color&select=value',{headers:{'apikey':'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVma2VhZnp6Y3Z1cGpzcmlub3RpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYwMTk4MzcsImV4cCI6MjA5MTU5NTgzN30.3wpjIrVtcWQDXbFhox_86cuhNak7tx-KH34unsCU-DM'}}).then(r=>r.json()).then(d=>{if(d[0]?.value)applyThemeColor(d[0].value,false);}).catch(()=>{});
 // Load immediately so OAuth redirects don't miss the session
 document.head.appendChild(_s);
 
