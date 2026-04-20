@@ -10,16 +10,13 @@ import discord
 import asyncio
 import re
 import os
-import smtplib
 import httpx
-from email.mime.text import MIMEText
 from supabase import create_client
 
 DISCORD_TOKEN      = os.getenv("DISCORD_TOKEN", "")
 SUPABASE_URL       = "https://efkeafzzcvupjsrinoti.supabase.co"
 SUPABASE_KEY       = os.getenv("SUPABASE_KEY", "")
-GMAIL_USER         = os.getenv("GMAIL_USER", "")
-GMAIL_PASS         = os.getenv("GMAIL_PASS", "")
+RESEND_API_KEY     = os.getenv("RESEND_API_KEY", "re_QZ3HcVPs_FDDJSvF2WeTSRJVZ7tf8PDcC")
 WATCH_CHANNELS     = ["pokemon"]
 TRACKALACKER_BOT   = "trackalacker bot"
 POLL_INTERVAL      = 60
@@ -40,10 +37,41 @@ CARRIER_GATEWAYS = {
 }
 
 
+def send_via_resend(to_email: str, message_text: str) -> bool:
+    """Send message through Resend using HTTPS instead of SMTP."""
+    if not RESEND_API_KEY:
+        print("[PokeFinder] Missing RESEND_API_KEY")
+        return False
+
+    headers = {
+        "Authorization": f"Bearer {RESEND_API_KEY}",
+        "Content-Type": "application/json",
+    }
+
+    payload = {
+        "from": "PokeFinder <onboarding@resend.dev>",
+        "to": [to_email],
+        "subject": " ",
+        "text": message_text,
+    }
+
+    try:
+        resp = httpx.post(
+            "https://api.resend.com/emails",
+            headers=headers,
+            json=payload,
+            timeout=20,
+        )
+        if resp.status_code in (200, 201):
+            return True
+        print(f"[PokeFinder] Resend failed: {resp.status_code} {resp.text}")
+    except Exception as e:
+        print(f"[PokeFinder] Resend error: {e}")
+    return False
+
+
 def send_sms_confirmation(phone: str, carrier: str):
     """Send a welcome/confirmation SMS when a user signs up for alerts."""
-    if not GMAIL_USER or not GMAIL_PASS:
-        return
     gateway = CARRIER_GATEWAYS.get(carrier.lower().replace(" ", ""))
     if not gateway or not phone:
         return
@@ -55,17 +83,10 @@ def send_sms_confirmation(phone: str, carrier: str):
         "Target, Walmart, Costco, and more.\n\n"
         "Reply STOP to unsubscribe."
     )
-    try:
-        msg = MIMEText(msg_text)
-        msg["From"] = GMAIL_USER
-        msg["To"] = sms_email
-        msg["Subject"] = ""
-        with smtplib.SMTP_SSL("smtp.gmail.com", 465) as smtp:
-            smtp.login(GMAIL_USER, GMAIL_PASS)
-            smtp.sendmail(GMAIL_USER, sms_email, msg.as_string())
+    ok = send_via_resend(sms_email, msg_text)
+    if ok:
         print(f"[PokeFinder] Confirmation SMS sent to {sms_email}")
-    except Exception as e:
-        print(f"[PokeFinder] Confirmation SMS failed: {e}")
+
 
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 client   = discord.Client()
@@ -168,8 +189,6 @@ async def poll_price(discord_msg_id: str, trackalacker_url: str, retailer: str, 
 
 
 def send_sms_notifications(product: str, retailer: str, price: float, url: str):
-    if not GMAIL_USER or not GMAIL_PASS:
-        return
     try:
         result = supabase.table("alert_subscriptions").select("phone_number, carrier, retailers").eq("active", True).execute()
         if not result.data:
@@ -187,19 +206,11 @@ def send_sms_notifications(product: str, retailer: str, price: float, url: str):
             if not phone or not gateway:
                 continue
             sms_email = gateway.format(number=phone)
-            try:
-                from email.mime.text import MIMEText
-                import smtplib
-                msg = MIMEText(msg_text)
-                msg["From"] = GMAIL_USER
-                msg["To"] = sms_email
-                msg["Subject"] = ""
-                with smtplib.SMTP_SSL("smtp.gmail.com", 465) as smtp:
-                    smtp.login(GMAIL_USER, GMAIL_PASS)
-                    smtp.sendmail(GMAIL_USER, sms_email, msg.as_string())
+            ok = send_via_resend(sms_email, msg_text)
+            if ok:
                 sent += 1
-            except Exception as e:
-                print(f"[PokeFinder] SMS failed to {sms_email}: {e}")
+            else:
+                print(f"[PokeFinder] SMS failed to {sms_email}")
         if sent:
             print(f"[PokeFinder] Sent {sent} SMS notifications")
     except Exception as e:
@@ -252,14 +263,13 @@ def parse_trackalacker(message: discord.Message) -> dict | None:
 def save_restock(data: dict) -> bool:
     try:
         supabase.table("restocks").insert(data).execute()
-        # Write to drop_patterns for intelligence tracking
         try:
             from datetime import datetime, timezone
             now = datetime.now(timezone.utc)
             supabase.table("drop_patterns").insert({
                 "retailer": data.get("retailer", "UNKNOWN"),
                 "dropped_at": now.isoformat(),
-                "day_of_week": now.weekday(),  # 0=Monday in Python
+                "day_of_week": now.weekday(),
                 "hour_of_day": now.hour,
                 "product_name": data.get("product_name"),
                 "price": float(data.get("price", 0)) if data.get("price") else None
