@@ -3,7 +3,7 @@ PokeFinder Discord Bot
 - Saves TrackaLacker alerts to Supabase instantly
 - Fetches direct retailer URL via Supabase Edge Function proxy
 - Polls price every 60s to detect sell-out
-- Sends SMS notifications through Resend HTTPS
+- Sends restock SMS by calling Supabase Edge Function
 """
 
 import discord
@@ -16,79 +16,17 @@ from supabase import create_client
 DISCORD_TOKEN      = os.getenv("DISCORD_TOKEN", "")
 SUPABASE_URL       = "https://efkeafzzcvupjsrinoti.supabase.co"
 SUPABASE_KEY       = os.getenv("SUPABASE_KEY", "")
-RESEND_API_KEY     = os.getenv("RESEND_API_KEY", "")
 WATCH_CHANNELS     = ["pokemon"]
 TRACKALACKER_BOT   = "trackalacker bot"
 POLL_INTERVAL      = 60
 POLL_MAX_TIME      = 3600
 
 EDGE_PROXY_URL = "https://efkeafzzcvupjsrinoti.supabase.co/functions/v1/trackalacker-proxy"
-
-CARRIER_GATEWAYS = {
-    "att":        "{number}@txt.att.net",
-    "verizon":    "{number}@vtext.com",
-    "tmobile":    "{number}@tmomail.net",
-    "sprint":     "{number}@messaging.sprintpcs.com",
-    "boost":      "{number}@sms.myboostmobile.com",
-    "cricket":    "{number}@sms.cricketwireless.net",
-    "metro":      "{number}@mymetropcs.com",
-    "uscellular": "{number}@email.uscc.net",
-}
-
-
-def send_via_resend(to_email: str, message_text: str) -> bool:
-    if not RESEND_API_KEY:
-        print("[PokeFinder] Missing RESEND_API_KEY")
-        return False
-
-    headers = {
-        "Authorization": f"Bearer {RESEND_API_KEY}",
-        "Content-Type": "application/json",
-    }
-
-    payload = {
-        "from": "PokeFinder <onboarding@resend.dev>",
-        "to": [to_email],
-        "subject": " ",
-        "text": message_text,
-    }
-
-    try:
-        resp = httpx.post(
-            "https://api.resend.com/emails",
-            headers=headers,
-            json=payload,
-            timeout=20,
-        )
-        if resp.status_code in (200, 201):
-            return True
-        print(f"[PokeFinder] Resend failed: {resp.status_code} {resp.text}")
-    except Exception as e:
-        print(f"[PokeFinder] Resend error: {e}")
-    return False
-
-
-def send_sms_confirmation(phone: str, carrier: str):
-    gateway = CARRIER_GATEWAYS.get(carrier.lower().replace(" ", ""))
-    if not gateway or not phone:
-        return
-
-    sms_email = gateway.format(number=phone)
-    msg_text = (
-        "Welcome to PokeFinder Alerts!\n\n"
-        "You're now subscribed to live restock notifications.\n"
-        "We'll text you the second a Pokemon TCG product drops at "
-        "Target, Walmart, Costco, and more.\n\n"
-        "Reply STOP to unsubscribe."
-    )
-
-    ok = send_via_resend(sms_email, msg_text)
-    if ok:
-        print(f"[PokeFinder] Confirmation SMS sent to {sms_email}")
-
+RESTOCK_SMS_URL = "https://efkeafzzcvupjsrinoti.supabase.co/functions/v1/restock-alert-sms"
 
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 client = discord.Client()
+
 
 def extract_slug(trackalacker_url: str):
     match = re.search(r'/products/showcase/([^?&/]+)', trackalacker_url)
@@ -193,49 +131,6 @@ async def poll_price(discord_msg_id: str, trackalacker_url: str, retailer: str, 
     print(f"[PokeFinder] Poll timeout: {discord_msg_id}")
 
 
-def send_sms_notifications(product: str, retailer: str, price, url: str):
-    try:
-        result = (
-            supabase.table("alert_subscriptions")
-            .select("phone_number, carrier, retailers")
-            .eq("active", True)
-            .execute()
-        )
-
-        if not result.data:
-            return
-
-        price_str = f"${price:.2f}" if price is not None else "N/A"
-        msg_text = f"POKEFINDER DROP\n{product}\n{retailer} - {price_str}\n{url}"
-
-        sent = 0
-        for sub in result.data:
-            sub_retailers = sub.get("retailers") or []
-            if sub_retailers and retailer.upper() not in [r.upper() for r in sub_retailers]:
-                continue
-
-            phone = re.sub(r"\D", "", sub.get("phone_number", ""))
-            carrier = sub.get("carrier", "").lower().replace(" ", "")
-            gateway = CARRIER_GATEWAYS.get(carrier)
-
-            if not phone or not gateway:
-                continue
-
-            sms_email = gateway.format(number=phone)
-            ok = send_via_resend(sms_email, msg_text)
-
-            if ok:
-                sent += 1
-            else:
-                print(f"[PokeFinder] SMS failed to {sms_email}")
-
-        if sent:
-            print(f"[PokeFinder] Sent {sent} SMS notifications")
-
-    except Exception as e:
-        print(f"[PokeFinder] SMS error: {e}")
-
-
 def parse_trackalacker(message):
     if not message.embeds:
         return None
@@ -320,6 +215,37 @@ def update_url(discord_msg_id: str, direct_url: str):
         print(f"[ERROR] URL update failed: {e}")
 
 
+def send_restock_sms_via_edge(product: str, retailer: str, price, url: str):
+    try:
+        price_str = f"${price:.2f}" if price is not None else "N/A"
+
+        payload = {
+            "product": product,
+            "retailer": retailer,
+            "price": price_str,
+            "url": url
+        }
+
+        resp = httpx.post(
+            RESTOCK_SMS_URL,
+            headers={
+                "Content-Type": "application/json",
+                "apikey": SUPABASE_KEY,
+                "Authorization": f"Bearer {SUPABASE_KEY}",
+            },
+            json=payload,
+            timeout=30,
+        )
+
+        if resp.status_code in (200, 201):
+            print(f"[PokeFinder] Restock SMS edge function success: {resp.text[:200]}")
+        else:
+            print(f"[PokeFinder] Restock SMS edge function failed: {resp.status_code} {resp.text}")
+
+    except Exception as e:
+        print(f"[PokeFinder] Restock SMS edge error: {e}")
+
+
 @client.event
 async def on_ready():
     print(f"[PokeFinder] Logged in as {client.user}")
@@ -376,7 +302,7 @@ async def on_message(message):
 
     asyncio.create_task(
         asyncio.to_thread(
-            send_sms_notifications,
+            send_restock_sms_via_edge,
             restock["product_name"],
             restock["retailer"],
             restock.get("price"),
